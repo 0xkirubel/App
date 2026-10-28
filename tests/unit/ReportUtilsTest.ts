@@ -28245,6 +28245,91 @@ describe('ReportUtils', () => {
             const result = getNonHeldAndFullAmount(expenseReport, true, [], convertToDisplayString);
             expect(result.nonHeldAmount).toContain('60.00');
         });
+
+        it('derives the unheld amount from held transactions when report unheld totals are stale for the approver', () => {
+            const reportID = 'staleUnheldTotalsReport';
+            const unheldTransaction = {
+                ...createRandomTransaction(1),
+                transactionID: 'unheldTx',
+                reportID,
+                amount: -2500,
+                currency: CONST.CURRENCY.USD,
+                reimbursable: true,
+            };
+            const heldTransaction = {
+                ...createRandomTransaction(2),
+                transactionID: 'heldTx',
+                reportID,
+                amount: -1000,
+                currency: CONST.CURRENCY.USD,
+                reimbursable: true,
+                comment: {...createRandomTransaction(2).comment, hold: 'holdActionID'},
+            };
+            const expenseReport: Report = {
+                ...createRandomReport(0, undefined),
+                reportID,
+                type: CONST.REPORT.TYPE.EXPENSE,
+                currency: CONST.CURRENCY.USD,
+                total: -3500,
+                unheldTotal: -3500,
+                reimbursableTotal: -3500,
+                unheldReimbursableTotal: -3500,
+            };
+
+            const result = getNonHeldAndFullAmount(expenseReport, false, [unheldTransaction, heldTransaction], convertToDisplayString);
+
+            expect(result.fullAmount).toContain('35.00');
+            expect(result.nonHeldAmount).toContain('25.00');
+            expect(result.hasValidNonHeldAmount).toBe(true);
+        });
+
+        it('does not treat duplicate approve amounts as valid when held amounts cannot be converted to the report currency', () => {
+            const expenseReport: Report = {
+                ...createRandomReport(0, undefined),
+                type: CONST.REPORT.TYPE.EXPENSE,
+                currency: CONST.CURRENCY.USD,
+                total: -3500,
+                unheldTotal: -3500,
+                reimbursableTotal: -3500,
+                unheldReimbursableTotal: -3500,
+            };
+            const heldTransaction = {
+                ...createRandomTransaction(1),
+                amount: -1000,
+                currency: CONST.CURRENCY.EUR,
+                reimbursable: true,
+                comment: {...createRandomTransaction(1).comment, hold: 'holdActionID'},
+            };
+
+            const result = getNonHeldAndFullAmount(expenseReport, false, [heldTransaction], convertToDisplayString);
+
+            expect(result.nonHeldAmount).toContain('35.00');
+            expect(result.fullAmount).toContain('35.00');
+            expect(result.hasValidNonHeldAmount).toBe(false);
+        });
+
+        it('returns hasValidNonHeldAmount false when every loaded expense is on hold', () => {
+            const expenseReport: Report = {
+                ...createRandomReport(0, undefined),
+                type: CONST.REPORT.TYPE.EXPENSE,
+                currency: CONST.CURRENCY.USD,
+                total: -1000,
+                unheldTotal: -1000,
+                reimbursableTotal: -1000,
+                unheldReimbursableTotal: -1000,
+            };
+            const heldTransaction = {
+                ...createRandomTransaction(1),
+                amount: -1000,
+                currency: CONST.CURRENCY.USD,
+                reimbursable: true,
+                comment: {...createRandomTransaction(1).comment, hold: 'holdActionID'},
+            };
+
+            const result = getNonHeldAndFullAmount(expenseReport, false, [heldTransaction], convertToDisplayString);
+
+            expect(result.hasValidNonHeldAmount).toBe(false);
+        });
     });
 
     describe('hasExportError', () => {

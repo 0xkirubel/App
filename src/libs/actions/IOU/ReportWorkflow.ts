@@ -39,7 +39,7 @@ import {
     getReimbursableTotal,
     getReportOrDraftReport,
     getReportTransactions,
-    getUnheldReimbursableTotal,
+    getUnheldAndFullTotalsWithHeldFallback,
     hasHeldExpenses as hasHeldExpensesReportUtils,
     hasOutstandingChildRequest,
 } from '@libs/ReportUtils';
@@ -176,8 +176,8 @@ function approveMoneyRequest(params: ApproveMoneyRequestFunctionParams) {
     }
 
     const reportTransactions = getReportTransactions(expenseReport.reportID);
-    const unheldTotal = getUnheldReimbursableTotal(expenseReport) + (expenseReport.unheldNonReimbursableTotal ?? 0);
-    let total = getReimbursableTotal(expenseReport) + (expenseReport.nonReimbursableTotal ?? 0);
+    const {fullTotal, unheldTotal} = getUnheldAndFullTotalsWithHeldFallback(expenseReport, reportTransactions, false);
+    let total = fullTotal;
     const hasHeldExpenses = hasHeldExpensesReportUtils(reportTransactions);
     if (hasHeldExpenses && !full && !!unheldTotal) {
         total = unheldTotal;

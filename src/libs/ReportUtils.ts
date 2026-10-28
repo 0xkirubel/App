@@ -12672,6 +12672,121 @@ function hasUpdatedTotal(report: OnyxInputOrEntry<Report>, policy: OnyxInputOrEn
     return !(hasPendingTransaction && (hasTransactionWithDifferentCurrency || hasDifferentWorkspaceCurrency)) && !hasOptimisticHeldExpense && !isReportTotalPending(report);
 }
 
+type UnheldAndFullReportTotals = {
+    fullTotal: number;
+    unheldTotal: number;
+    unheldReimbursableTotal: number;
+};
+
+function getTransactionAmountInReportCurrency(transaction: Transaction, report: OnyxEntry<Report>): number | undefined {
+    if (!report?.currency) {
+        return undefined;
+    }
+
+    const isFromExpenseReport = isExpenseReport(report);
+    const reportTotalSignCoefficient = isFromExpenseReport ? -1 : 1;
+    const isUnreported = transaction.reportID === CONST.REPORT.UNREPORTED_REPORT_ID;
+    if (getCurrency(transaction) === report.currency) {
+        return getTransactionAmount(transaction, isFromExpenseReport, isUnreported) * reportTotalSignCoefficient;
+    }
+
+    if (transaction.convertedAmount == null) {
+        return undefined;
+    }
+
+    return getConvertedAmount(transaction, isFromExpenseReport, isUnreported) * reportTotalSignCoefficient;
+}
+
+function sumHeldTransactionAmountsInReportCurrency(iouReport: OnyxEntry<Report>, allReportTransactions: Transaction[], reimbursableOnly: boolean): number | undefined {
+    const heldTransactions = allReportTransactions.filter((transaction) => isOnHoldTransactionUtils(transaction));
+    if (heldTransactions.length === 0) {
+        return undefined;
+    }
+
+    let heldTotal = 0;
+    for (const transaction of heldTransactions) {
+        if (reimbursableOnly && !getReimbursable(transaction)) {
+            continue;
+        }
+
+        const amountInReportCurrency = getTransactionAmountInReportCurrency(transaction, iouReport);
+        if (amountInReportCurrency === undefined) {
+            return undefined;
+        }
+
+        heldTotal += amountInReportCurrency;
+    }
+
+    return heldTotal;
+}
+
+function areReportUnheldTotalsStaleForHeldExpenses(
+    allReportTransactions: Transaction[],
+    shouldExcludeNonReimbursables: boolean,
+    total: number,
+    unheldTotal: number,
+    reimbursableTotal: number,
+    unheldReimbursableTotal: number,
+): boolean {
+    if (!hasHeldExpenses(allReportTransactions)) {
+        return false;
+    }
+
+    if (shouldExcludeNonReimbursables) {
+        return unheldReimbursableTotal === reimbursableTotal;
+    }
+
+    return unheldTotal === total;
+}
+
+/**
+ * When held transactions are present locally but report-level unheld totals still match the full total,
+ * subtract the held transaction amounts from the backend totals instead of summing non-held transactions,
+ * which may not all be loaded on the approver's client.
+ */
+function getUnheldAndFullTotalsWithHeldFallback(iouReport: OnyxEntry<Report>, allReportTransactions: Transaction[], shouldExcludeNonReimbursables: boolean): UnheldAndFullReportTotals {
+    const reimbursableTotal = getReimbursableTotal(iouReport);
+    const unheldReimbursableTotal = getUnheldReimbursableTotal(iouReport);
+
+    let fullTotal: number;
+    let unheldTotal: number;
+    if (shouldExcludeNonReimbursables) {
+        fullTotal = reimbursableTotal;
+        unheldTotal = unheldReimbursableTotal;
+    } else {
+        fullTotal = reimbursableTotal + (iouReport?.nonReimbursableTotal ?? 0);
+        unheldTotal = iouReport?.unheldTotal ?? unheldReimbursableTotal + (iouReport?.unheldNonReimbursableTotal ?? 0);
+    }
+
+    if (!areReportUnheldTotalsStaleForHeldExpenses(allReportTransactions, shouldExcludeNonReimbursables, fullTotal, unheldTotal, reimbursableTotal, unheldReimbursableTotal)) {
+        return {fullTotal, unheldTotal, unheldReimbursableTotal};
+    }
+
+    const heldReimbursableTotal = sumHeldTransactionAmountsInReportCurrency(iouReport, allReportTransactions, true);
+    const heldFullTotal = sumHeldTransactionAmountsInReportCurrency(iouReport, allReportTransactions, false);
+
+    let nextUnheldReimbursableTotal = unheldReimbursableTotal;
+    let nextUnheldTotal = unheldTotal;
+
+    if (heldReimbursableTotal !== undefined && heldReimbursableTotal !== 0) {
+        nextUnheldReimbursableTotal = reimbursableTotal - heldReimbursableTotal;
+    }
+
+    if (heldFullTotal !== undefined && heldFullTotal !== 0) {
+        nextUnheldTotal = fullTotal - heldFullTotal;
+    }
+
+    if (shouldExcludeNonReimbursables) {
+        nextUnheldTotal = nextUnheldReimbursableTotal;
+    }
+
+    return {
+        fullTotal,
+        unheldTotal: nextUnheldTotal,
+        unheldReimbursableTotal: nextUnheldReimbursableTotal,
+    };
+}
+
 /**
  * Return held and full amount formatted with used currency
  */
@@ -12684,36 +12799,13 @@ function getNonHeldAndFullAmount(
     // if the report is an expense report, the total amount should be negated
     const coefficient = isExpenseReport(iouReport) ? -1 : 1;
 
-    // Prefer the freshly computed totals from the backend. The stored total column can lag behind the
-    // sum of the underlying transactions, so deriving from reimbursableTotal/nonReimbursableTotal keeps
-    // displayed amounts in sync with what the user actually entered.
-    const reimbursableTotal = getReimbursableTotal(iouReport);
-    const unheldReimbursableTotal = getUnheldReimbursableTotal(iouReport);
-
-    let total: number;
-    let unheldTotal: number;
-    if (shouldExcludeNonReimbursables) {
-        total = reimbursableTotal;
-        unheldTotal = unheldReimbursableTotal;
-    } else {
-        total = reimbursableTotal + (iouReport?.nonReimbursableTotal ?? 0);
-        unheldTotal = iouReport?.unheldTotal ?? unheldReimbursableTotal + (iouReport?.unheldNonReimbursableTotal ?? 0);
-    }
+    const {fullTotal, unheldTotal} = getUnheldAndFullTotalsWithHeldFallback(iouReport, allReportTransactions, shouldExcludeNonReimbursables);
 
     const adjustedUnheldTotal = unheldTotal * coefficient;
-    const adjustedTotal = total * coefficient;
+    const adjustedTotal = fullTotal * coefficient;
 
-    // For the "approve unheld" option to be valid, we need:
-    // 1. There should be held expenses
-    // 2. For expense reports with negative totals, we need to ensure the unheld amount is valid
-    //    by checking that the absolute values are meaningful and different
     const hasHeldExpensesLocal = hasHeldExpenses(allReportTransactions);
-    const hasValidNonHeldAmount =
-        hasHeldExpensesLocal &&
-        // For normal cases (positive amounts or IOU reports)
-        (adjustedUnheldTotal >= 0 ||
-            // For expense reports with negative amounts, check if amounts are meaningful
-            (isExpenseReport(iouReport) && Math.abs(adjustedUnheldTotal) > 0 && Math.abs(adjustedUnheldTotal) !== Math.abs(adjustedTotal)));
+    const hasValidNonHeldAmount = hasHeldExpensesLocal && adjustedUnheldTotal !== adjustedTotal && Math.abs(adjustedUnheldTotal) > 0;
 
     return {
         nonHeldAmount: convertToDisplayString(adjustedUnheldTotal, iouReport?.currency),
@@ -15519,6 +15611,7 @@ export {
     getMoneyRequestSpendBreakdown,
     getNegatedReportTotals,
     getNonHeldAndFullAmount,
+    getUnheldAndFullTotalsWithHeldFallback,
     getReimbursableTotal,
     getUnheldReimbursableTotal,
     getOneOnOneChatParticipants,
