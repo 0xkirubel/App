@@ -4,6 +4,7 @@ import type {CustomRNImageManipulatorResult} from '@libs/cropOrRotateImage/types
 import Navigation from '@libs/Navigation/Navigation';
 import * as PersonalDetailsUtils from '@libs/PersonalDetailsUtils';
 import * as UserAvatarUtils from '@libs/UserAvatarUtils';
+import invalidateAvatarImageCache from '@libs/invalidateAvatarImageCache';
 
 import CONST from '@src/CONST';
 import type {Country} from '@src/CONST';
@@ -32,6 +33,9 @@ const mockPersonalDetailsUtils = jest.mocked(PersonalDetailsUtils);
 
 jest.mock('@libs/UserAvatarUtils');
 const mockUserAvatarUtils = jest.mocked(UserAvatarUtils);
+
+jest.mock('@libs/invalidateAvatarImageCache');
+const mockInvalidateAvatarImageCache = jest.mocked(invalidateAvatarImageCache);
 
 describe('actions/PersonalDetails', () => {
     beforeAll(() => {
@@ -873,6 +877,27 @@ describe('actions/PersonalDetails', () => {
 
             expect(mockAPI.write).not.toHaveBeenCalled();
         });
+
+        it('invalidates the stored avatar cache before uploading a new photo', async () => {
+            // Given a user replacing an uploaded avatar
+            const mockFile = createMock<File>({
+                uri: 'file://test-avatar.jpg',
+                name: 'test-avatar.jpg',
+            });
+            const storedAvatarURL = 'https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/user123456.jpeg';
+            const currentUserPersonalDetail: Pick<CurrentUserPersonalDetails, 'avatarThumbnail' | 'avatar' | 'accountID'> = {
+                avatar: storedAvatarURL,
+                avatarThumbnail: `${storedAvatarURL.slice(0, -5)}_128.jpeg`,
+                accountID: 123,
+            };
+
+            // When updateAvatar runs
+            PersonalDetailsActions.updateAvatar(mockFile, currentUserPersonalDetail);
+            await waitForBatchedUpdates();
+
+            // Then the stale CloudFront cache entry should be dropped before the write
+            expect(mockInvalidateAvatarImageCache).toHaveBeenCalledWith(storedAvatarURL);
+        });
     });
 
     describe('deleteAvatar', () => {
@@ -926,6 +951,28 @@ describe('actions/PersonalDetails', () => {
                     },
                 ],
             });
+        });
+
+        it('invalidates the stored avatar cache before deleting the photo', async () => {
+            // Given a user removing an uploaded avatar
+            const storedAvatarURL = 'https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/user123456.jpeg';
+            const currentUserPersonalDetail: Pick<CurrentUserPersonalDetails, 'fallbackIcon' | 'avatar' | 'accountID' | 'email' | 'firstName' | 'lastName'> = {
+                avatar: storedAvatarURL,
+                fallbackIcon: storedAvatarURL,
+                accountID: 123,
+                email: 'test@test.te',
+                firstName: 'Jane',
+                lastName: 'Smith',
+            };
+
+            mockUserAvatarUtils.getDefaultAvatarURL.mockReturnValue('https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/default-avatar_7.png');
+
+            // When deleteAvatar runs
+            PersonalDetailsActions.deleteAvatar(currentUserPersonalDetail);
+            await waitForBatchedUpdates();
+
+            // Then the cached bitmap for the abandoned URL should be evicted while it is still known in Onyx
+            expect(mockInvalidateAvatarImageCache).toHaveBeenCalledWith(storedAvatarURL);
         });
 
         it('should handle null fallbackIcon in failure data', async () => {

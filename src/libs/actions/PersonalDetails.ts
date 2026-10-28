@@ -21,6 +21,7 @@ import type {CustomRNImageManipulatorResult} from '@libs/cropOrRotateImage/types
 import DateUtils from '@libs/DateUtils';
 import * as ErrorUtils from '@libs/ErrorUtils';
 import * as LoginUtils from '@libs/LoginUtils';
+import invalidateAvatarImageCache from '@libs/invalidateAvatarImageCache';
 import Navigation from '@libs/Navigation/Navigation';
 import {isSupportAuthToken} from '@libs/Network/NetworkStore';
 import * as PersonalDetailsUtils from '@libs/PersonalDetailsUtils';
@@ -416,6 +417,11 @@ function updateAvatar(
 
     const parameters: UpdateUserAvatarParams = isDefaultAvatarResult(file) ? {customExpensifyAvatarID: file.customExpensifyAvatarID} : {file};
 
+    if (!isDefaultAvatarResult(file)) {
+        // Uploaded avatars reuse the same CloudFront URL; drop cached bitmaps before the response points back at it.
+        invalidateAvatarImageCache(currentUserPersonalDetails.avatar);
+    }
+
     API.write(WRITE_COMMANDS.UPDATE_USER_AVATAR, parameters, {
         optimisticData,
         successData,
@@ -483,6 +489,10 @@ function updateAvatarStyle(
 
     const parameters: UpdateUserAvatarParams = {color};
 
+    if (willClearAvatar) {
+        invalidateAvatarImageCache(currentUserPersonalDetails.avatar);
+    }
+
     API.write(WRITE_COMMANDS.UPDATE_USER_AVATAR, parameters, {
         optimisticData,
         successData,
@@ -522,6 +532,9 @@ function deleteAvatar(currentUserPersonalDetails: Pick<CurrentUserPersonalDetail
             },
         }),
     ];
+
+    // Required for remove-then-upload: after delete, Onyx holds a letter URL so a later upload cannot infer which CloudFront URL to purge.
+    invalidateAvatarImageCache(currentUserPersonalDetails.avatar);
 
     API.write(WRITE_COMMANDS.DELETE_USER_AVATAR, null, {
         optimisticData,
