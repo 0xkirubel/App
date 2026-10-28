@@ -3377,9 +3377,11 @@ function markCommentAsUnread(reportID: string | undefined, reportActions: OnyxEn
             ? reportAction.actorAccountID
             : (latestReportActionFromOtherUsers?.actorAccountID ?? report?.lastActorAccountID);
 
+    const reportActionID = reportAction?.reportActionID ?? latestReportActionFromOtherUsers?.reportActionID;
+
     const reportValue = {
         lastReadTime,
-        manuallyMarkedUnreadReportActionID: reportAction?.reportActionID ?? null,
+        manuallyMarkedUnreadReportActionID: reportActionID ?? null,
         ...(lastActorAccountID && {lastActorAccountID}),
     };
 
@@ -3417,8 +3419,6 @@ function markCommentAsUnread(reportID: string | undefined, reportActions: OnyxEn
             },
         },
     ];
-
-    const reportActionID = reportAction?.reportActionID ?? latestReportActionFromOtherUsers?.reportActionID;
 
     const parameters: MarkAsUnreadParams = {
         reportID,

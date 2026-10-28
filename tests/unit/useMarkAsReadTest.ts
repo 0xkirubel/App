@@ -13,6 +13,7 @@ import type * as OnyxTypes from '@src/types/onyx';
 import type {OnyxEntry} from 'react-native-onyx';
 
 import React from 'react';
+import {DeviceEventEmitter} from 'react-native';
 
 import createRandomReportAction from '../utils/collections/reportActions';
 
@@ -299,6 +300,87 @@ describe('useMarkAsRead', () => {
         act(() => mockTriggerAppFocus?.());
 
         expect(readNewestAction).toHaveBeenCalledWith(REPORT_ID, true);
+    });
+
+    it('does not auto-read on visibility flip after manual mark-as-unread when lastVisibleActionCreated is unchanged', () => {
+        const readReport = {
+            reportID: REPORT_ID,
+            lastReadTime: '2023-01-01 11:00:00.000',
+            lastVisibleActionCreated: '2023-01-01 11:00:00.000',
+        } as OnyxTypes.Report;
+        const markedUnreadReport = {
+            ...readReport,
+            lastReadTime: '2023-01-01 10:59:59.999',
+        } as OnyxTypes.Report;
+
+        mockIsUnread = false;
+        const {rerender} = renderHook(
+            (props: {report: OnyxTypes.Report}) =>
+                useMarkAsRead({
+                    reportID: REPORT_ID,
+                    report: props.report as OnyxEntry<OnyxTypes.Report>,
+                    transactionThreadReport: undefined,
+                    sortedVisibleReportActions: [],
+                    isScrolledToEnd: true,
+                    hasNewerActions: false,
+                }),
+            {initialProps: {report: readReport}},
+        );
+        readNewestAction.mockClear();
+
+        // Given the user marks the open chat unread from the LHN
+        mockIsUnread = true;
+        rerender({report: markedUnreadReport});
+        act(() => {
+            DeviceEventEmitter.emit(`unreadAction_${REPORT_ID}`, markedUnreadReport.lastReadTime);
+        });
+        readNewestAction.mockClear();
+
+        // When visibility toggles without a new message (the reported ~3s iOS clobber)
+        mockIsVisible = false;
+        rerender({report: markedUnreadReport});
+        mockIsVisible = true;
+        rerender({report: markedUnreadReport});
+        act(() => mockTriggerAppFocus?.());
+
+        // Then no automatic read receipt is sent
+        expect(readNewestAction).not.toHaveBeenCalled();
+    });
+
+    it('auto-reads after manual mark-as-unread once a newer visible action arrives', () => {
+        const markedUnreadReport = {
+            reportID: REPORT_ID,
+            lastReadTime: '2023-01-01 10:59:59.999',
+            lastVisibleActionCreated: '2023-01-01 11:00:00.000',
+        } as OnyxTypes.Report;
+        const reportWithNewMessage = {
+            ...markedUnreadReport,
+            lastVisibleActionCreated: '2023-01-01 12:00:00.000',
+        } as OnyxTypes.Report;
+        const incomingAction: OnyxTypes.ReportAction = {...createRandomReportAction(2), created: '2023-01-01 12:00:00.000', actorAccountID: 2};
+
+        mockIsUnread = true;
+        const {rerender} = renderHook(
+            (props: {report: OnyxTypes.Report; actions: OnyxTypes.ReportAction[]}) =>
+                useMarkAsRead({
+                    reportID: REPORT_ID,
+                    report: props.report as OnyxEntry<OnyxTypes.Report>,
+                    transactionThreadReport: undefined,
+                    sortedVisibleReportActions: props.actions,
+                    isScrolledToEnd: true,
+                    hasNewerActions: false,
+                }),
+            {initialProps: {report: markedUnreadReport, actions: [] as OnyxTypes.ReportAction[]}},
+        );
+        act(() => {
+            DeviceEventEmitter.emit(`unreadAction_${REPORT_ID}`, markedUnreadReport.lastReadTime);
+        });
+        readNewestAction.mockClear();
+
+        // When a new message lands while the user is still viewing the chat
+        rerender({report: reportWithNewMessage, actions: [incomingAction]});
+
+        expect(readNewestAction).toHaveBeenCalledWith(REPORT_ID, false);
     });
 
     it('should not mark the report as read on report change when the screen is unfocused and focus is required', () => {

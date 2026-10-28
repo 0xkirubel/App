@@ -3,7 +3,7 @@ import Log from '@libs/Log';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackRouteProp} from '@libs/Navigation/PlatformStackNavigation/types';
 import {isCurrentActionUnread, isReportPreviewAction} from '@libs/ReportActionsUtils';
-import {getReportNotificationPreference, isArchivedNonExpenseReport, isUnread} from '@libs/ReportUtils';
+import {getReportLastVisibleActionCreated, getReportNotificationPreference, isArchivedNonExpenseReport, isUnread} from '@libs/ReportUtils';
 import {getLHNUnreadState} from '@libs/SidebarUtils';
 import Visibility from '@libs/Visibility';
 
@@ -148,6 +148,8 @@ function useMarkAsRead({
     const userActiveSince = useRef<string>(DateUtils.getDBTime());
     const lastMessageTime = useRef<string | null>(null);
     const didMarkReportAsReadInitially = useRef(false);
+    // The report-change auto-read is meant to react to a new visible action, not to visibility or load flips alone.
+    const lastReportChangeAutoReadAtVisibleActionCreated = useRef<string | undefined>(undefined);
 
     const lastAction = sortedVisibleReportActions.at(0);
     const isReportUnreadValue = isUnread(report, transactionThreadReport, isReportArchived, derivedIsEmptyReport) || (!!lastAction && isCurrentActionUnread(report, lastAction));
@@ -160,7 +162,20 @@ function useMarkAsRead({
     useEffect(() => {
         userActiveSince.current = DateUtils.getDBTime();
         didMarkReportAsReadInitially.current = false;
+        lastReportChangeAutoReadAtVisibleActionCreated.current = undefined;
     }, [reportID, scopeKey, instanceID]);
+
+    const handleManualMarkAsUnread = useEffectEvent((manualUnreadLastReadTime: string) => {
+        userActiveSince.current = DateUtils.getDBTime();
+        // Arm the app-visibility guard: without a non-null lastMessageTime the path falls back to rolled-back lastReadTime and re-reads.
+        const lastVisibleActionCreated = getReportLastVisibleActionCreated(report, transactionThreadReport) ?? lastAction?.created;
+        if (lastVisibleActionCreated) {
+            lastMessageTime.current = lastVisibleActionCreated;
+        } else if (manualUnreadLastReadTime) {
+            lastMessageTime.current = DateUtils.addMillisecondsFromDateTime(manualUnreadLastReadTime, 1);
+        }
+        readActionSkippedRef.current = false;
+    });
 
     useEffect(() => {
         // A hidden pre-mount must not take the scope from the visible report, so it claims it on reveal.
@@ -177,8 +192,8 @@ function useMarkAsRead({
             return;
         }
 
-        const subscription = DeviceEventEmitter.addListener(`unreadAction_${reportID}`, () => {
-            userActiveSince.current = DateUtils.getDBTime();
+        const subscription = DeviceEventEmitter.addListener(`unreadAction_${reportID}`, (manualUnreadLastReadTime: string) => {
+            handleManualMarkAsUnread(manualUnreadLastReadTime);
         });
         return () => subscription.remove();
     }, [reportID, isAnonymousUser]);
@@ -274,8 +289,15 @@ function useMarkAsRead({
         const isFromNotification = route?.params?.referrer === CONST.REFERRER.NOTIFICATION;
         const shouldReadOnReportChange = ((isVisible && Visibility.hasFocus()) || isFromNotification) && !hasNewerActions && isScrolledToEnd;
 
+        const currentLastVisibleActionCreated =
+            getReportLastVisibleActionCreated(report, transactionThreadReport) ?? report?.lastVisibleActionCreated ?? transactionThreadReport?.lastVisibleActionCreated;
+        if (lastReportChangeAutoReadAtVisibleActionCreated.current === currentLastVisibleActionCreated) {
+            return;
+        }
+
         if (shouldReadOnReportChange) {
             readNewestAction(reportID, isReportActionsLoaded);
+            lastReportChangeAutoReadAtVisibleActionCreated.current = currentLastVisibleActionCreated;
             if (isFromNotification) {
                 Navigation.setParams({referrer: undefined});
             }
@@ -345,6 +367,7 @@ function useMarkAsRead({
 
     const markNewestActionAsRead = () => {
         readActionSkippedRef.current = false;
+        lastReportChangeAutoReadAtVisibleActionCreated.current = undefined;
         readNewestAction(reportID, true);
     };
 

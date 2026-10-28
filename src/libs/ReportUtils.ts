@@ -10653,7 +10653,16 @@ function isUnread(report: OnyxEntry<Report>, oneTransactionThreadReport: OnyxEnt
     const drivingActorAccountID =
         (oneTransactionThreadReport?.lastVisibleActionCreated ?? '') > (report?.lastVisibleActionCreated ?? '') ? oneTransactionThreadReport?.lastActorAccountID : report?.lastActorAccountID;
 
-    if (isUnreadFromTimestamp && drivingActorAccountID === deprecatedCurrentUserAccountID && !(lastReadTime < lastMentionedTime)) {
+    const manualMarkUnreadTime = lastVisibleActionCreated ? DateUtils.subtractMillisecondsFromDateTime(lastVisibleActionCreated, 1) : '';
+    const isManualMarkUnreadFromTimestamp = !!lastVisibleActionCreated && lastReadTime === manualMarkUnreadTime;
+
+    if (
+        isUnreadFromTimestamp &&
+        drivingActorAccountID === deprecatedCurrentUserAccountID &&
+        !(lastReadTime < lastMentionedTime) &&
+        !isManualMarkUnreadFromTimestamp &&
+        !report.manuallyMarkedUnreadReportActionID
+    ) {
         return false;
     }
 
