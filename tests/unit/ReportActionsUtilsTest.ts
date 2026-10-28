@@ -8460,6 +8460,12 @@ describe('ReportActionsUtils', () => {
             expect(ReportActionsUtils.getLatestConciergeFeedbackActionID([draft, previous], persisted([draft, previous]))).toBe('300');
         });
 
+        it('does not treat an optimistic Concierge comment as rateable even when its id is in Onyx', () => {
+            const optimistic = conciergeComment('300', '2026-09-04 00:00:00.000', {isOptimisticAction: true});
+            const previous = conciergeComment('200', '2026-09-02 00:00:00.000');
+            expect(ReportActionsUtils.getLatestConciergeFeedbackActionID([optimistic, previous], persisted([optimistic, previous]))).toBe('200');
+        });
+
         it('skips Concierge whispers and deleted Concierge comments', () => {
             const whisper = conciergeComment('400', '2026-09-05 00:00:00.000', {originalMessage: {html: 'w', whisperedTo: [1]}} as Partial<ReportAction>);
             const deleted = conciergeComment('350', '2026-09-04 00:00:00.000', {message: [{type: 'COMMENT', html: '', text: ''}]} as Partial<ReportAction>);

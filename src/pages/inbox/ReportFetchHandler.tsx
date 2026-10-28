@@ -185,20 +185,20 @@ function ReportFetchHandler() {
     const onboardingSignal = introSelected ? `${introSelected.choice ?? ''}:${introSelected.inviteType ?? ''}:${isInviteOnboardingComplete ? 'complete' : 'pending'}` : '';
     const shouldDeferGuidedSetupOpenReport = !!isLoadingApp && (isRegularOnboardingPending || isPendingInviteOnboarding);
 
-    const fetchReport = useEffectEvent(() => {
+    const fetchReport = useEffectEvent((): boolean => {
         // For a Submit-via-PDF secure access link, JoinReportViaSecureLink grants access and returns the report.
         // Calling the vanilla openReport before the join completes would 403 and latch the not-found page, so defer
         // to the join while the secureKey is still on the route. Once the join grants access the secureKey is cleared,
         // and normal fetching resumes.
         if (secureKeyFromRoute) {
-            return;
+            return false;
         }
 
         // isPendingCreationFromRoute means reportIDFromRoute is a client-generated ID that doesn't exist
         // on the server yet. Calling openReport for it would 403 and show the not-found page instead.
         // Wait until the report exists locally and is no longer optimistic before fetching it.
         if (isPendingCreationFromRoute && (!reportOnyx?.reportID || isPendingReportCreation)) {
-            return;
+            return false;
         }
 
         if (reportMetadata.isOptimisticReport && report?.type === CONST.REPORT.TYPE.CHAT && !isPolicyExpenseChat(report)) {
@@ -210,7 +210,7 @@ function ReportFetchHandler() {
             if (!reportLoadingState.hasOnceLoadedReportActions) {
                 markLocalReportActionsAsLoaded(reportIDFromRoute);
             }
-            return;
+            return false;
         }
 
         // A draft-only report (created optimistically via createDraftWorkspace, e.g. the "Submit to my employer" Submit
@@ -218,18 +218,18 @@ function ReportFetchHandler() {
         // 403 "Report not found" and merge an errorFields.notFound stub into REPORT, shadowing the draft. It's persisted
         // later by the confirmation's AddTrackedExpenseToPolicy request, so never openReport it here.
         if (!reportOnyx?.reportID && !!reportDraftOnyx?.reportID) {
-            return;
+            return false;
         }
 
         // A pre-mounted draft gets copied into the real report collection so it can render immediately,
         // which makes reportOnyx?.reportID truthy even though the row is still speculative - the guard
         // above no longer catches it, so check the pre-mount marker directly instead.
         if (isPreMountedDraft) {
-            return;
+            return false;
         }
 
         if (report?.errorFields?.notFound && isOffline) {
-            return;
+            return false;
         }
 
         // When a user goes through guided setup, various tasks are created for chatting with Concierge.
@@ -237,7 +237,7 @@ function ReportFetchHandler() {
         // which means we will not be able to obtain the correct link for one of the tasks.
         // More information here: https://github.com/Expensify/App/issues/71742
         if (shouldDeferGuidedSetupOpenReport) {
-            return;
+            return false;
         }
 
         if (isHiddenPreMount) {
@@ -266,6 +266,7 @@ function ReportFetchHandler() {
             hasCompletedGuidedSetupFlow,
             fullPolicySnapshot: reportOnyx?.policyID && fullPolicySnapshotLastModified ? {policyID: reportOnyx.policyID, lastModified: fullPolicySnapshotLastModified} : undefined,
         });
+        return true;
     });
 
     const createOneTransactionThread = useEffectEvent(() => {
@@ -553,9 +554,10 @@ function ReportFetchHandler() {
         if (stampedReportIDRef.current !== reportIDFromRoute || !isFocused || isOffline || isInPreloadedTab) {
             return;
         }
-        stampedReportIDRef.current = undefined;
-        fetchReport();
-    }, [reportIDFromRoute, reportLoadingState.hasOnceLoadedReportActions, isFocused, isOffline, isInPreloadedTab]);
+        if (fetchReport()) {
+            stampedReportIDRef.current = undefined;
+        }
+    }, [reportIDFromRoute, reportLoadingState.hasOnceLoadedReportActions, isFocused, isOffline, isInPreloadedTab, shouldDeferGuidedSetupOpenReport, isLoadingApp]);
 
     // isLoadingInitialReportActions only clears via OpenReport's success/failure Onyx update (no client timeout), so
     // a reconciliation stall that pauses the queue before that response arrives leaves the skeleton stuck with

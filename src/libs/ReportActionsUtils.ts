@@ -1840,6 +1840,9 @@ function isConciergeFeedbackCandidate(action: ReportAction): boolean {
         isActionOfType(action, CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT) &&
         !isDeletedAction(action) &&
         !isWhisperAction(action) &&
+        !action.isOptimisticAction &&
+        !action.pendingAction &&
+        action.reportActionID !== String(CONST.CONCIERGE_GREETING_ACTION_ID) &&
         // A failed comment does not exist on the server, so a reaction on it cannot be saved
         isEmptyObject(action.errors)
     );
