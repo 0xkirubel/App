@@ -12673,6 +12673,62 @@ function hasUpdatedTotal(report: OnyxInputOrEntry<Report>, policy: OnyxInputOrEn
 }
 
 /**
+ * Sums held transaction amounts using the same signed formula as putOnHold (Hold.ts), including only
+ * transactions whose currency matches the report currency.
+ */
+function getSumOfHeldTransactionsInReportCurrency(
+    iouReport: OnyxEntry<Report>,
+    shouldExcludeNonReimbursables: boolean,
+    allReportTransactions: Transaction[],
+): number {
+    if (!iouReport?.currency) {
+        return 0;
+    }
+
+    const isExpenseReportLocal = isExpenseReport(iouReport);
+    const coefficient = isExpenseReportLocal ? -1 : 1;
+
+    return allReportTransactions.reduce((sum, transaction) => {
+        if (!isOnHoldTransactionUtils(transaction)) {
+            return sum;
+        }
+
+        if (shouldExcludeNonReimbursables && !transaction.reimbursable) {
+            return sum;
+        }
+
+        if (transaction.currency !== iouReport.currency) {
+            return sum;
+        }
+
+        return sum + getTransactionAmount(transaction, isExpenseReportLocal) * coefficient;
+    }, 0);
+}
+
+/**
+ * When held expenses exist but report unheld aggregates were not refreshed on this client (typical for
+ * approvers after a hold push), subtract known held amounts from the authoritative full total.
+ */
+function getUnheldTotalWithHeldExpenseFallback(
+    iouReport: OnyxEntry<Report>,
+    shouldExcludeNonReimbursables: boolean,
+    allReportTransactions: Transaction[],
+    total: number,
+    unheldTotal: number,
+): number {
+    if (!hasHeldExpenses(allReportTransactions) || unheldTotal !== total) {
+        return unheldTotal;
+    }
+
+    const heldTotal = getSumOfHeldTransactionsInReportCurrency(iouReport, shouldExcludeNonReimbursables, allReportTransactions);
+    if (heldTotal === 0) {
+        return unheldTotal;
+    }
+
+    return total - heldTotal;
+}
+
+/**
  * Return held and full amount formatted with used currency
  */
 function getNonHeldAndFullAmount(
@@ -12700,20 +12756,17 @@ function getNonHeldAndFullAmount(
         unheldTotal = iouReport?.unheldTotal ?? unheldReimbursableTotal + (iouReport?.unheldNonReimbursableTotal ?? 0);
     }
 
+    unheldTotal = getUnheldTotalWithHeldExpenseFallback(iouReport, shouldExcludeNonReimbursables, allReportTransactions, total, unheldTotal);
+
     const adjustedUnheldTotal = unheldTotal * coefficient;
     const adjustedTotal = total * coefficient;
 
     // For the "approve unheld" option to be valid, we need:
     // 1. There should be held expenses
-    // 2. For expense reports with negative totals, we need to ensure the unheld amount is valid
-    //    by checking that the absolute values are meaningful and different
+    // 2. The unheld amount must differ from the full total
     const hasHeldExpensesLocal = hasHeldExpenses(allReportTransactions);
-    const hasValidNonHeldAmount =
-        hasHeldExpensesLocal &&
-        // For normal cases (positive amounts or IOU reports)
-        (adjustedUnheldTotal >= 0 ||
-            // For expense reports with negative amounts, check if amounts are meaningful
-            (isExpenseReport(iouReport) && Math.abs(adjustedUnheldTotal) > 0 && Math.abs(adjustedUnheldTotal) !== Math.abs(adjustedTotal)));
+    const hasDifferentUnheldAndFullAmount = Math.abs(adjustedUnheldTotal) !== Math.abs(adjustedTotal);
+    const hasValidNonHeldAmount = hasHeldExpensesLocal && hasDifferentUnheldAndFullAmount && adjustedUnheldTotal >= 0;
 
     return {
         nonHeldAmount: convertToDisplayString(adjustedUnheldTotal, iouReport?.currency),
@@ -15520,6 +15573,7 @@ export {
     getNegatedReportTotals,
     getNonHeldAndFullAmount,
     getReimbursableTotal,
+    getUnheldTotalWithHeldExpenseFallback,
     getUnheldReimbursableTotal,
     getOneOnOneChatParticipants,
     getOptimisticDataForAncestors,
