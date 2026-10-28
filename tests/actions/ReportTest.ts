@@ -6820,6 +6820,54 @@ describe('actions/Report', () => {
         });
     });
 
+    describe('markCommentAsUnread auto-read hold', () => {
+        it('does not let automatic readNewestAction undo a deliberate mark-as-unread until the report changes', async () => {
+            global.fetch = TestHelper.createGlobalFetchMock();
+            const REPORT_ID = '101234-auto-read-hold';
+            const otherUserActionCreated = '2026-01-15 10:00:00.000';
+            const reportActions: OnyxTypes.ReportActions = {
+                '100': {
+                    reportActionID: '100',
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    created: otherUserActionCreated,
+                    actorAccountID: 2,
+                    message: [{type: 'COMMENT', text: 'From user 2'}],
+                },
+            };
+
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`, {
+                reportID: REPORT_ID,
+                lastReadTime: '2026-01-15 11:00:00.000',
+                lastVisibleActionCreated: otherUserActionCreated,
+                lastActorAccountID: 2,
+            });
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${REPORT_ID}`, reportActions);
+            await waitForBatchedUpdates();
+
+            Report.markCommentAsUnread(REPORT_ID, reportActions, reportActions['100'], 1, false);
+            await waitForBatchedUpdates();
+
+            const reportAfterMark = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`);
+            const lastReadAfterMark = reportAfterMark?.lastReadTime;
+            expect(reportAfterMark?.manuallyMarkedUnreadReportActionID).toBe('100');
+
+            Report.readNewestAction(REPORT_ID, true);
+            await waitForBatchedUpdates();
+
+            const reportAfterAutoRead = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`);
+            expect(reportAfterAutoRead?.lastReadTime).toBe(lastReadAfterMark);
+
+            await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`, {lastVisibleActionCreated: '2026-01-15 10:05:00.000'});
+            await waitForBatchedUpdates();
+
+            Report.readNewestAction(REPORT_ID, true);
+            await waitForBatchedUpdates();
+
+            const reportAfterNewMessage = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${REPORT_ID}`);
+            expect(reportAfterNewMessage?.lastReadTime).not.toBe(lastReadAfterMark);
+        });
+    });
+
     describe('openReport with shouldKeepManualUnreadMarker', () => {
         async function givenAManualUnreadMark(reportID: string) {
             await Onyx.merge(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`, {reportID, manuallyMarkedUnreadReportActionID: 'marked-action-id'});

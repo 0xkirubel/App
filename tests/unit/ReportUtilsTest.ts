@@ -11386,6 +11386,33 @@ describe('ReportUtils', () => {
             expect(isUnread(report, undefined, false, undefined)).toBe(true);
             expect(isUnread(report, undefined, false, undefined)).toBe(true);
         });
+
+        it('stays unread when the current user is the last actor but another users message is still newer than lastReadTime', async () => {
+            const reportID = 'manual-unread-self-last-actor';
+            const otherUserActionCreated = '2024-03-01 12:00:05.000';
+            const lastReadTime = DateUtils.subtractMillisecondsFromDateTime(otherUserActionCreated, 1);
+            const report = {
+                ...LHNTestUtils.getFakeReport(),
+                reportID,
+                lastReadTime,
+                lastVisibleActionCreated: otherUserActionCreated,
+                lastActorAccountID: currentUserAccountID,
+                lastMessageText: 'Hello from me',
+            };
+
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`, report);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`, {
+                'other-user-action': {
+                    reportActionID: 'other-user-action',
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    created: otherUserActionCreated,
+                    actorAccountID: 999,
+                    message: [{type: 'COMMENT', text: 'Hello from them'}],
+                },
+            });
+
+            expect(isUnread(report, undefined, false, false)).toBe(true);
+        });
     });
 
     describe('isEmptyReport', () => {

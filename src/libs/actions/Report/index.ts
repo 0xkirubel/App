@@ -3277,6 +3277,38 @@ function expandURLPreview(reportID: string | undefined, reportActionID: string) 
     API.read(READ_COMMANDS.EXPAND_URL_PREVIEW, parameters);
 }
 
+type ManualUnreadAutoReadHold = {
+    lastReadTime: string;
+    lastVisibleActionCreated: string;
+};
+
+/** Tracks deliberate mark-as-unread boundaries so automatic readNewestAction calls cannot undo them until a new message arrives. */
+const manualUnreadAutoReadHoldByReportID = new Map<string, ManualUnreadAutoReadHold>();
+
+function rememberManualUnreadAutoReadHold(reportID: string, lastReadTime: string, lastVisibleActionCreated: string) {
+    manualUnreadAutoReadHoldByReportID.set(reportID, {lastReadTime, lastVisibleActionCreated});
+}
+
+function shouldHoldAutoReadForManualUnread(reportID: string, report: OnyxEntry<Report>, oneTransactionThreadReport: OnyxEntry<Report>): boolean {
+    const hold = manualUnreadAutoReadHoldByReportID.get(reportID);
+    if (!hold || !report) {
+        return false;
+    }
+
+    const currentLastVisibleActionCreated = getReportLastVisibleActionCreated(report, oneTransactionThreadReport) ?? '';
+    if (report.lastReadTime === hold.lastReadTime && currentLastVisibleActionCreated === hold.lastVisibleActionCreated) {
+        return true;
+    }
+
+    manualUnreadAutoReadHoldByReportID.delete(reportID);
+    return false;
+}
+
+/** Test-only: clears manual unread auto-read holds between test cases. */
+function clearManualUnreadAutoReadHoldsForTests() {
+    manualUnreadAutoReadHoldByReportID.clear();
+}
+
 /** Marks the new report actions as read
  * @param hasOnceLoadedReportActions Whether the report actions have been loaded at least once.
  * If false, the API call will be skipped to avoid 401 errors from reading reports not yet shared with the user.
@@ -3293,6 +3325,20 @@ function readNewestAction(reportID: string | undefined, isReportActionsLoaded: b
         return;
     }
 
+    const report = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${reportID}`];
+    const chatReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${report?.chatReportID}`];
+    const reportActions = ReportActionsUtils.getAllReportActions(reportID);
+    const transactionThreadReportID = ReportActionsUtils.getOneTransactionThreadReportID(report, chatReport, reportActions, false);
+    const transactionThreadReport = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${transactionThreadReportID}`];
+
+    if (!shouldResetUnreadMarker && shouldHoldAutoReadForManualUnread(reportID, report, transactionThreadReport)) {
+        return;
+    }
+
+    if (shouldResetUnreadMarker) {
+        manualUnreadAutoReadHoldByReportID.delete(reportID);
+    }
+
     const lastReadTime = getDBTimeWithSkew();
 
     // Deliberately leaves `manuallyMarkedUnreadReportActionID` alone so an auto-read doesn't wipe a marker the
@@ -3303,6 +3349,7 @@ function readNewestAction(reportID: string | undefined, isReportActionsLoaded: b
             key: `${ONYXKEYS.COLLECTION.REPORT}${reportID}`,
             value: {
                 lastReadTime,
+                ...(shouldResetUnreadMarker && {manuallyMarkedUnreadReportActionID: null}),
             },
         },
     ];
@@ -3377,9 +3424,11 @@ function markCommentAsUnread(reportID: string | undefined, reportActions: OnyxEn
             ? reportAction.actorAccountID
             : (latestReportActionFromOtherUsers?.actorAccountID ?? report?.lastActorAccountID);
 
+    const reportActionID = reportAction?.reportActionID ?? latestReportActionFromOtherUsers?.reportActionID;
+
     const reportValue = {
         lastReadTime,
-        manuallyMarkedUnreadReportActionID: reportAction?.reportActionID ?? null,
+        manuallyMarkedUnreadReportActionID: reportActionID ?? null,
         ...(lastActorAccountID && {lastActorAccountID}),
     };
 
@@ -3418,13 +3467,13 @@ function markCommentAsUnread(reportID: string | undefined, reportActions: OnyxEn
         },
     ];
 
-    const reportActionID = reportAction?.reportActionID ?? latestReportActionFromOtherUsers?.reportActionID;
-
     const parameters: MarkAsUnreadParams = {
         reportID,
         lastReadTime,
         reportActionID,
     };
+
+    rememberManualUnreadAutoReadHold(reportID, lastReadTime, lastVisibleActionCreated ?? '');
 
     API.write(WRITE_COMMANDS.MARK_AS_UNREAD, parameters, {optimisticData, successData, failureData});
     DeviceEventEmitter.emit(`unreadAction_${reportID}`, lastReadTime);
