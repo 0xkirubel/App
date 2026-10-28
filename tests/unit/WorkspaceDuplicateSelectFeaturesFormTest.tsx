@@ -81,15 +81,29 @@ const MERCHANT_RULE: Rule = {
     actions: toIndexMap([{name: CONST.RULES.ACTIONS.SET, field: CONST.RULES.EXPENSE_DEFAULT.FIELD.CATEGORY, value: 'Travel'}]),
 };
 
-/** A Control workspace whose only possible workspace-level rule is eReceipts, so the test decides whether the Rules row is shown. */
-function createSourcePolicy(hasWorkspaceRules: boolean): Policy {
+/** Control workspace with the Rules feature on; workspace-level rule list is empty when eReceipts is off. */
+function createSourcePolicy(hasWorkspaceLevelRules: boolean): Policy {
     return {
         ...createRandomPolicy(Number(POLICY_ID), CONST.POLICY.TYPE.CORPORATE),
+        areRulesEnabled: true,
         preventSelfApproval: false,
         maxExpenseAmountNoReceipt: CONST.DISABLED_MAX_EXPENSE_VALUE,
         maxExpenseAmount: CONST.DISABLED_MAX_EXPENSE_VALUE,
         maxExpenseAge: CONST.DISABLED_MAX_EXPENSE_VALUE,
-        eReceipts: hasWorkspaceRules,
+        eReceipts: hasWorkspaceLevelRules,
+    };
+}
+
+function createSourcePolicyWithRulesDisabled(): Policy {
+    return {
+        ...createRandomPolicy(Number(POLICY_ID), CONST.POLICY.TYPE.CORPORATE),
+        areRulesEnabled: false,
+        prohibitedExpenses: CONST.POLICY.DEFAULT_PROHIBITED_EXPENSES,
+        glCodes: true,
+        disabledFields: {defaultBillable: true, reimbursable: false},
+        maxExpenseAmountNoReceipt: CONST.DISABLED_MAX_EXPENSE_VALUE,
+        maxExpenseAmount: CONST.DISABLED_MAX_EXPENSE_VALUE,
+        maxExpenseAge: CONST.DISABLED_MAX_EXPENSE_VALUE,
     };
 }
 
@@ -195,7 +209,7 @@ describe('WorkspaceDuplicateSelectFeaturesForm Rules and Merchant rules', () => 
     });
 
     it('copies merchant rules on their own when the source has no workspace-level rules', async () => {
-        // Given a source with a merchant rule but no workspace-level rules, so the Rules row is hidden
+        // Given a source with Rules on, a merchant rule, but no workspace-level rules, so the Rules row is hidden
         await renderForm(false);
         expect(getRow('rules')).toBeUndefined();
         expect(getRow('codingRules')?.isSelected).toBe(true);
@@ -205,5 +219,28 @@ describe('WorkspaceDuplicateSelectFeaturesForm Rules and Merchant rules', () => 
 
         // Then the merchant rules are still copied, because there is no Rules row they could depend on
         expect(getSentParts()).toMatchObject({expenses: false, codingRules: true});
+    });
+
+    it('hides Rules and Merchant rules when the Rules feature is disabled on the source', async () => {
+        // Given a Control workspace with Rules off but leftover rule field values
+        await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${POLICY_ID}`, createSourcePolicyWithRulesDisabled());
+        await Onyx.set(`${ONYXKEYS.COLLECTION.RULE}merchantRule`, MERCHANT_RULE);
+        await Onyx.set(ONYXKEYS.RAM_ONLY_HAS_RULES_DATA_BEEN_FETCHED, true);
+        await Onyx.set(ONYXKEYS.DUPLICATE_WORKSPACE, {name: 'Duplicate', policyID: TARGET_POLICY_ID});
+        await waitForBatchedUpdates();
+
+        render(
+            <OnyxListItemProvider>
+                <WorkspaceDuplicateSelectFeaturesForm policyID={POLICY_ID} />
+            </OnyxListItemProvider>,
+        );
+        await waitForBatchedUpdates();
+
+        expect(getRow('rules')).toBeUndefined();
+        expect(getRow('codingRules')).toBeUndefined();
+
+        pressContinue();
+
+        expect(getSentParts()).toMatchObject({expenses: false, codingRules: false});
     });
 });

@@ -103,6 +103,7 @@ import * as PhoneNumber from '@libs/PhoneNumber';
 import {buildOnyxDataForGovernmentRateAutoUpdate} from '@libs/PolicyDistanceRatesUtils';
 import * as PolicyUtils from '@libs/PolicyUtils';
 import {
+    arePolicyRulesEnabled,
     getCustomUnitsForDuplication,
     getMemberAccountIDsForWorkspace,
     getOwnerChangePayerSuccessData,
@@ -3449,6 +3450,18 @@ function createDraftWorkspace({
     return params;
 }
 
+/** Resolved Rules enablement for a duplicate, matching what the workspace menu uses and what we persist after DuplicatePolicy succeeds. */
+function getDuplicatedAreRulesEnabled(sourcePolicy: Policy, parts: DuplicatePolicyDataOptions['parts'] | undefined, policyCategories?: PolicyCategories): boolean {
+    const isRulesPartSelected = !!parts?.expenses;
+    const isCodingRulesPartSelected = !!parts?.codingRules;
+
+    if (!isRulesPartSelected && !isCodingRulesPartSelected) {
+        return false;
+    }
+
+    return arePolicyRulesEnabled(sourcePolicy, policyCategories);
+}
+
 function buildOptimisticDuplicatePolicy(
     sourcePolicy: Policy,
     policyOptions: DuplicatePolicyDataOptions & {distanceCustomUnitID: string; perDiemCustomUnitID: string; customUnitRateID: string},
@@ -3462,6 +3475,7 @@ function buildOptimisticDuplicatePolicy(
         distanceCustomUnitID: duplicatedDistanceCustomUnitID,
         perDiemCustomUnitID: duplicatedPerDiemCustomUnitID,
         customUnitRateID: duplicatedCustomUnitRateID,
+        policyCategories: duplicatedPolicyCategories,
     } = policyOptions;
 
     const isMemberFeatureSelected = duplicatedParts?.people;
@@ -3472,7 +3486,7 @@ function buildOptimisticDuplicatePolicy(
     const isInvoicesFeatureSelected = duplicatedParts?.invoices;
     const isInvoiceFieldsFeatureSelected = duplicatedParts?.invoiceFields;
     const isDistanceRatesFeatureSelected = duplicatedParts?.distance;
-    const isRulesFeatureSelected = duplicatedParts?.expenses;
+    const duplicatedAreRulesEnabled = getDuplicatedAreRulesEnabled(sourcePolicy, duplicatedParts, duplicatedPolicyCategories);
     const isWorkflowsFeatureSelected = duplicatedParts?.exportLayouts;
     const isPerDiemFeatureSelected = duplicatedParts?.perDiem;
     const isOverviewFeatureSelected = duplicatedParts?.overview;
@@ -3516,7 +3530,7 @@ function buildOptimisticDuplicatePolicy(
         areTagsEnabled: isTagsFeatureSelected,
         areDistanceRatesEnabled: isDistanceRatesFeatureSelected,
         areInvoicesEnabled: isInvoicesFeatureSelected,
-        areRulesEnabled: isRulesFeatureSelected,
+        areRulesEnabled: duplicatedAreRulesEnabled,
         areWorkflowsEnabled: isWorkflowsFeatureSelected,
         areReportFieldsEnabled: isReportsFeatureSelected ? sourcePolicy?.areReportFieldsEnabled : false,
         areInvoiceFieldsEnabled: isInvoiceFieldsFeatureSelected ? sourcePolicy?.areInvoiceFieldsEnabled : false,
@@ -3707,6 +3721,7 @@ function buildDuplicatePolicyData(policy: Policy, options: DuplicatePolicyDataOp
             key: `${ONYXKEYS.COLLECTION.POLICY}${targetPolicyID}`,
             value: {
                 pendingAction: null,
+                areRulesEnabled: getDuplicatedAreRulesEnabled(policy, parts, policyCategories),
                 pendingFields: {
                     autoReporting: null,
                     approvalMode: null,
