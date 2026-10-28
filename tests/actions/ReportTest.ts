@@ -18,6 +18,7 @@ import {trackFullstoryEvent} from '@libs/Fullstory/utils';
 import getIsNarrowLayout from '@libs/getIsNarrowLayout';
 import HttpUtils from '@libs/HttpUtils';
 import Navigation from '@libs/Navigation/Navigation';
+import getReportRouteForCurrentContext from '@libs/Navigation/helpers/getReportRouteForCurrentContext';
 import REPORT_LINK_ROUTE_PARAMS from '@libs/Navigation/reportLinkRouteParams';
 import {buildOptimisticNextStep} from '@libs/NextStepUtils';
 import {getAccountIDsByLogins} from '@libs/PersonalDetailsUtils';
@@ -7768,6 +7769,32 @@ describe('actions/Report', () => {
             expect(Navigation.navigate).toHaveBeenCalledWith(
                 appendParam(ROUTES.REPORT_WITH_ID.getRoute(EXISTING_CHILD_REPORT.reportID), REPORT_LINK_ROUTE_PARAMS.SHOULD_SCROLL_TO_LATEST, 'true'),
             );
+        });
+
+        it('should navigate to a support ticket thread without merging an optimistic chat report when the child report is not in Onyx', async () => {
+            const SUPPORT_TICKET_CHILD_REPORT_ID = '5555';
+            const PARENT_REPORT = createRandomReport(1, undefined);
+            const PARENT_REPORT_ACTION: OnyxTypes.ReportAction = {
+                ...createRandomReportAction(REPORT_ACTION_ID),
+                reportActionID: '1',
+                actorAccountID: TEST_USER_ACCOUNT_ID,
+                actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                childType: CONST.REPORT.TYPE.SUPPORT_TICKET,
+                childReportID: SUPPORT_TICKET_CHILD_REPORT_ID,
+            };
+
+            await TestHelper.signInWithTestUser(TEST_USER_ACCOUNT_ID, TEST_USER_LOGIN);
+            Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${PARENT_REPORT_ID}`, PARENT_REPORT);
+            await waitForBatchedUpdates();
+
+            // When the replies footer opens a support ticket whose report object has not been loaded yet
+            Report.navigateToAndOpenChildReport(undefined, PARENT_REPORT_ACTION, PARENT_REPORT, TEST_USER_ACCOUNT_ID, INTRO_SELECTED, undefined, undefined, undefined);
+            await waitForBatchedUpdates();
+
+            // Then navigation matches the support ticket preview card and no optimistic chat report is written
+            expect(Navigation.navigate).toHaveBeenCalledWith(getReportRouteForCurrentContext({reportID: SUPPORT_TICKET_CHILD_REPORT_ID}));
+            const childReport = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${SUPPORT_TICKET_CHILD_REPORT_ID}`);
+            expect(childReport).toBeUndefined();
         });
 
         it('should work with undefined child report ID (new thread scenario)', async () => {

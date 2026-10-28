@@ -2960,6 +2960,12 @@ function navigateToAndOpenChildReport(
     // TODO: This will be made required once all callers thread the value. Refactor issue: https://github.com/Expensify/App/issues/66425
     delegateAccountID?: number,
 ) {
+    // Support ticket threads already exist server-side; opening them must not merge an optimistic chat report onto their Onyx key.
+    if (ReportActionsUtils.isCreatedSupportTicketReportAction(parentReportAction) && parentReportAction.childReportID) {
+        Navigation.navigate(getReportRouteForCurrentContext({reportID: parentReportAction.childReportID}));
+        return;
+    }
+
     const report =
         childReport ??
         createChildReport(
