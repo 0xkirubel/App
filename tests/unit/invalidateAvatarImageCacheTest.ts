@@ -4,7 +4,7 @@ describe('getAvatarImageCacheURLs', () => {
     it('returns nothing for local and letter avatars', () => {
         // Given a local crop URI and a generated letter avatar URL
         const localURI = 'file:///data/user/0/com.expensify.chat/cache/crop.jpg';
-        const letterURL = 'https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/generated/v1/green/AB.png';
+        const letterURL = 'https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/generated/letter/v1/green/AB.png';
 
         // When resolving cache URLs to evict
         // Then neither source should produce remote cache keys
