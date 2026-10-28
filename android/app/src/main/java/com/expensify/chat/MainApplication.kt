@@ -51,8 +51,9 @@ class MainApplication : MultiDexApplication(), ReactApplication {
         super.onCreate()
 
         // Plaid's LinkActivity calls setRequestedOrientation(PORTRAIT) in its own onCreate(),
-        // which forces the UI to portrait even when the device is in landscape. We override it
-        // here so Plaid can render in whichever orientation the device is actually in.
+        // which forces the UI to portrait even when the device is in landscape. We override that
+        // on tablets, and on phones we lock to the orientation at Link open so users cannot rotate
+        // mid-flow into a layout Plaid does not support (see #87423 and #102562).
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -64,7 +65,15 @@ class MainApplication : MultiDexApplication(), ReactApplication {
                     }
                 }
                 if (activity.javaClass.name == "com.plaid.internal.link.LinkActivity") {
-                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    val isTablet = activity.resources.configuration.smallestScreenWidthDp >= 600
+                    // Tablets keep free rotation so Plaid can use the wider landscape viewport.
+                    // Phones lock to the orientation at Link open so mid-flow rotation cannot reach
+                    // Plaid's unsupported landscape + keyboard layout (issue #102562).
+                    activity.requestedOrientation = if (isTablet) {
+                        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                    }
                 }
             }
             override fun onActivityStarted(activity: Activity) {}
