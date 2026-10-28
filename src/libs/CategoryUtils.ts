@@ -4,7 +4,7 @@ import type {CurrencyListActionsContextType} from '@hooks/useCurrencyList';
 
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
-import type {Policy, PolicyCategories, TaxRate, TaxRatesWithDefault} from '@src/types/onyx';
+import type {Policy, PolicyCategories, PolicyCategory, TaxRate, TaxRatesWithDefault} from '@src/types/onyx';
 import type {ApprovalRule, ExpenseRule, MccGroup} from '@src/types/onyx/Policy';
 
 import type {OnyxCollection} from 'react-native-onyx';
@@ -283,6 +283,45 @@ function getAvailableNonPersonalPolicyCategories(policyCategories: OnyxCollectio
     );
 }
 
+const CATEGORY_RULES_PENDING_FIELD_KEYS = [
+    'maxExpenseAmount',
+    'maxAmountNoReceipt',
+    'maxAmountNoItemizedReceipt',
+    'areCommentsRequired',
+    'areAttendeesRequired',
+    'commentHint',
+] as const satisfies ReadonlyArray<keyof PolicyCategory>;
+
+/**
+ * Enabled categories whose rule fields pending deletion are cleared, so Rules enablement matches what the Rules UI shows.
+ */
+function getPolicyCategoriesForRulesCheck(policyCategories: PolicyCategories | undefined): PolicyCategories | undefined {
+    if (!policyCategories) {
+        return undefined;
+    }
+
+    const categoriesForRulesCheck: PolicyCategories = {};
+
+    for (const [categoryName, category] of Object.entries(policyCategories)) {
+        if (!category.enabled || category.pendingAction === CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE) {
+            continue;
+        }
+
+        let categoryForRulesCheck: PolicyCategory = category;
+        for (const field of CATEGORY_RULES_PENDING_FIELD_KEYS) {
+            if (category.pendingFields?.[field] === CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE) {
+                if (categoryForRulesCheck === category) {
+                    categoryForRulesCheck = {...category};
+                }
+                categoryForRulesCheck[field] = undefined;
+            }
+        }
+        categoriesForRulesCheck[categoryName] = categoryForRulesCheck;
+    }
+
+    return Object.keys(categoriesForRulesCheck).length > 0 ? categoriesForRulesCheck : undefined;
+}
+
 function hasAnyCategoryRules(categories: PolicyCategories | undefined): boolean {
     return Object.values(categories ?? {}).some((category) => {
         if (category.maxExpenseAmount !== undefined && category.maxExpenseAmount !== null && category.maxExpenseAmount !== CONST.DISABLED_MAX_EXPENSE_VALUE) {
@@ -319,6 +358,7 @@ export {
     getDecodedFullCategoryName,
     processCategoryNameSegments,
     getAvailableNonPersonalPolicyCategories,
+    getPolicyCategoriesForRulesCheck,
     hasAnyCategoryRules,
     getCategoryNameError,
     getCategoryNameErrorMessage,

@@ -85,6 +85,7 @@ import type {
 import type SetPolicyCashExpenseModeParams from '@libs/API/parameters/SetPolicyCashExpenseModeParams';
 import type UpdatePolicyMembersCustomFieldsParams from '@libs/API/parameters/UpdatePolicyMembersCustomFieldsParams';
 import {READ_COMMANDS, SIDE_EFFECT_REQUEST_COMMANDS, WRITE_COMMANDS} from '@libs/API/types';
+import {getPolicyCategoriesForRulesCheck} from '@libs/CategoryUtils';
 import type {CustomRNImageManipulatorResult} from '@libs/cropOrRotateImage/types';
 import * as CurrencyUtils from '@libs/CurrencyUtils';
 import DateUtils from '@libs/DateUtils';
@@ -3462,8 +3463,10 @@ function buildOptimisticDuplicatePolicy(
         distanceCustomUnitID: duplicatedDistanceCustomUnitID,
         perDiemCustomUnitID: duplicatedPerDiemCustomUnitID,
         customUnitRateID: duplicatedCustomUnitRateID,
+        policyCategories: duplicatedPolicyCategories,
     } = policyOptions;
 
+    const categoriesForRulesCheck = getPolicyCategoriesForRulesCheck(duplicatedPolicyCategories);
     const isMemberFeatureSelected = duplicatedParts?.people;
     const isReportsFeatureSelected = duplicatedParts?.reports;
     const isConnectionsFeatureSelected = duplicatedParts?.connections;
@@ -3473,6 +3476,7 @@ function buildOptimisticDuplicatePolicy(
     const isInvoiceFieldsFeatureSelected = duplicatedParts?.invoiceFields;
     const isDistanceRatesFeatureSelected = duplicatedParts?.distance;
     const isRulesFeatureSelected = duplicatedParts?.expenses;
+    const shouldEnableRules = !!(isRulesFeatureSelected && PolicyUtils.arePolicyRulesEnabled(sourcePolicy, categoriesForRulesCheck));
     const isWorkflowsFeatureSelected = duplicatedParts?.exportLayouts;
     const isPerDiemFeatureSelected = duplicatedParts?.perDiem;
     const isOverviewFeatureSelected = duplicatedParts?.overview;
@@ -3516,7 +3520,7 @@ function buildOptimisticDuplicatePolicy(
         areTagsEnabled: isTagsFeatureSelected,
         areDistanceRatesEnabled: isDistanceRatesFeatureSelected,
         areInvoicesEnabled: isInvoicesFeatureSelected,
-        areRulesEnabled: isRulesFeatureSelected,
+        areRulesEnabled: shouldEnableRules,
         areWorkflowsEnabled: isWorkflowsFeatureSelected,
         areReportFieldsEnabled: isReportsFeatureSelected ? sourcePolicy?.areReportFieldsEnabled : false,
         areInvoiceFieldsEnabled: isInvoiceFieldsFeatureSelected ? sourcePolicy?.areInvoiceFieldsEnabled : false,
@@ -3579,6 +3583,9 @@ function buildDuplicatePolicyData(policy: Policy, options: DuplicatePolicyDataOp
         rules,
         personalDetailsByLogins,
     } = options;
+
+    const categoriesForRulesCheck = getPolicyCategoriesForRulesCheck(policyCategories);
+    const shouldEnableRules = !!(parts?.expenses && PolicyUtils.arePolicyRulesEnabled(policy, categoriesForRulesCheck));
 
     const {
         adminsChatReportID,
@@ -3706,6 +3713,7 @@ function buildDuplicatePolicyData(policy: Policy, options: DuplicatePolicyDataOp
             onyxMethod: Onyx.METHOD.MERGE,
             key: `${ONYXKEYS.COLLECTION.POLICY}${targetPolicyID}`,
             value: {
+                areRulesEnabled: shouldEnableRules,
                 pendingAction: null,
                 pendingFields: {
                     autoReporting: null,

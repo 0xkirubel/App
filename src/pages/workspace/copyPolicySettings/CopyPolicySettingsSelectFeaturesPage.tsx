@@ -42,6 +42,7 @@ import {
     getPerDiemCustomUnit,
     isCollectPolicy,
     isInvoiceFieldsEnabled,
+    arePolicyRulesEnabled,
 } from '@libs/PolicyUtils';
 import {formatAddressToString} from '@libs/ReportActionsUtils';
 import {getReportFieldsByPolicyID} from '@libs/ReportUtils';
@@ -147,6 +148,7 @@ function CopyPolicySettingsSelectFeaturesPage() {
         connectedIntegrationCount: connectedIntegration?.length ?? 0,
         hasWorkflowRules: !!workflows?.length,
         hasWorkspaceRules: !!rules?.length,
+        isSourcePolicyRulesEnabled: arePolicyRulesEnabled(sourcePolicy, policyCategories),
         codingRulesCount,
         hasInvoiceConfiguration: !!sourcePolicy?.areInvoicesEnabled && (!!invoiceConfigurationText || invoiceFieldsCount > 0 || isInvoiceFieldsEnabled(sourcePolicy)),
         isCollectPolicy: isCollectPolicy(sourcePolicy),

@@ -1,7 +1,8 @@
 import type {LocaleContextProps} from '@components/LocaleContextProvider';
 
+import {getPolicyCategoriesForRulesCheck} from '@libs/CategoryUtils';
 import {hasExplicitFlagAmount} from '@libs/FlagForReviewRulesUtils';
-import {getCorrectedAutoReportingFrequency, getReimbursementChoice, getWorkflowApprovalsUnavailable} from '@libs/PolicyUtils';
+import {arePolicyRulesEnabled, getCorrectedAutoReportingFrequency, getReimbursementChoice, getWorkflowApprovalsUnavailable} from '@libs/PolicyUtils';
 import {categoryHasAnyRequireFieldsRule} from '@libs/RequireFieldsRulesUtils';
 
 import {getAutoReportingFrequencyDisplayNames} from '@pages/workspace/workflows/WorkspaceAutoReportingFrequencyPage';
@@ -13,6 +14,11 @@ import type {Policy, PolicyCategories} from '@src/types/onyx';
 import type {ConnectionName} from '@src/types/onyx/Policy';
 
 function getWorkspaceRules(policy: Policy | undefined, translate: LocaleContextProps['translate'], policyCategories?: PolicyCategories) {
+    const categoriesForRulesCheck = getPolicyCategoriesForRulesCheck(policyCategories);
+    if (!arePolicyRulesEnabled(policy, categoriesForRulesCheck)) {
+        return null;
+    }
+
     const workflowApprovalsUnavailable = getWorkflowApprovalsUnavailable(policy);
     const autoPayApprovedReportsUnavailable =
         !policy?.areWorkflowsEnabled || getReimbursementChoice(policy) !== CONST.POLICY.REIMBURSEMENT_CHOICES.REIMBURSEMENT_YES || !policy?.achAccount?.bankAccountID;
@@ -67,7 +73,7 @@ function getWorkspaceRules(policy: Policy | undefined, translate: LocaleContextP
     }
 
     // Field requirements and flag for review rules are stored on the categories rather than on the policy.
-    const enabledCategories = Object.values(policyCategories ?? {}).filter((category) => category.enabled && category.pendingAction !== CONST.RED_BRICK_ROAD_PENDING_ACTION.DELETE);
+    const enabledCategories = Object.values(categoriesForRulesCheck ?? {});
     if (enabledCategories.some((category) => categoryHasAnyRequireFieldsRule(category))) {
         total.push(translate('workspace.rules.tabs.requireFields'));
     }
