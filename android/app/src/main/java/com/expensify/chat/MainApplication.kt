@@ -5,7 +5,6 @@ import com.facebook.react.common.assets.ReactFontManager
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.database.CursorWindow
 import android.os.Build
@@ -50,9 +49,6 @@ class MainApplication : MultiDexApplication(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
 
-        // Plaid's LinkActivity calls setRequestedOrientation(PORTRAIT) in its own onCreate(),
-        // which forces the UI to portrait even when the device is in landscape. We override it
-        // here so Plaid can render in whichever orientation the device is actually in.
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -62,9 +58,6 @@ class MainApplication : MultiDexApplication(), ReactApplication {
                     if (!activity.javaClass.name.startsWith("com.expensify.")) {
                         PrivacyCover.applyTaskDescription(activity)
                     }
-                }
-                if (activity.javaClass.name == "com.plaid.internal.link.LinkActivity") {
-                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
             }
             override fun onActivityStarted(activity: Activity) {}
