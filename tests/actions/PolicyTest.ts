@@ -18,6 +18,7 @@ import type {
     PolicyJoinMember,
     PolicyReportField,
     Policy as PolicyType,
+    PolicyCategories,
     Report,
     ReportAction,
     ReportActions,
@@ -787,6 +788,72 @@ describe('actions/Policy', () => {
             expect(duplicatedRules).toHaveLength(0);
             const policy = await getOnyxValue(`${ONYXKEYS.COLLECTION.POLICY}${policyID}`);
             expect(policy?.areRulesEnabled).toBe(false);
+
+            await mockFetch?.resume?.();
+            await waitForBatchedUpdates();
+        });
+
+        it('duplicate workspace from a source with Rules disabled keeps areRulesEnabled false in optimistic and success data', async () => {
+            const fakePolicy: PolicyType = {
+                ...createRandomPolicy(17, CONST.POLICY.TYPE.CORPORATE),
+                areRulesEnabled: false,
+                prohibitedExpenses: CONST.POLICY.DEFAULT_PROHIBITED_EXPENSES,
+                disabledFields: {defaultBillable: true, reimbursable: false},
+            };
+            mockFetch?.pause?.();
+            await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${fakePolicy.id}`, fakePolicy);
+            await waitForBatchedUpdates();
+
+            const targetPolicyID = Policy.generatePolicyID();
+
+            Policy.duplicateWorkspace(fakePolicy, {
+                currentUserAccountID: ESH_ACCOUNT_ID,
+                currentUserEmail: ESH_EMAIL,
+                policyName: 'Rules Off Duplicate',
+                policyID: fakePolicy.id,
+                targetPolicyID,
+                welcomeNote: 'Join my policy',
+                personalDetailsByLogins: {},
+                parts: {expenses: false},
+                localCurrency: 'USD',
+            });
+            await waitForBatchedUpdates();
+
+            const optimisticPolicy = await getOnyxValue(`${ONYXKEYS.COLLECTION.POLICY}${targetPolicyID}`);
+            expect(optimisticPolicy?.areRulesEnabled).toBe(false);
+
+            await mockFetch?.resume?.();
+            await waitForBatchedUpdates();
+        });
+
+        it.each([
+            {description: 'has no category rules', maxExpenseAmount: undefined, expectedAreRulesEnabled: false},
+            {description: 'has category rules', maxExpenseAmount: 5000, expectedAreRulesEnabled: true},
+        ])('duplicate workspace from a migrated Control policy that $description sets areRulesEnabled to $expectedAreRulesEnabled', async ({maxExpenseAmount, expectedAreRulesEnabled}) => {
+            const fakePolicy: PolicyType = {...createRandomPolicy(18, CONST.POLICY.TYPE.CORPORATE), areRulesEnabled: undefined};
+            const policyCategories: PolicyCategories = {Travel: {name: 'Travel', enabled: true, maxExpenseAmount}};
+            mockFetch?.pause?.();
+            await Onyx.set(`${ONYXKEYS.COLLECTION.POLICY}${fakePolicy.id}`, fakePolicy);
+            await waitForBatchedUpdates();
+
+            const targetPolicyID = Policy.generatePolicyID();
+
+            Policy.duplicateWorkspace(fakePolicy, {
+                currentUserAccountID: ESH_ACCOUNT_ID,
+                currentUserEmail: ESH_EMAIL,
+                policyName: 'Migrated Control Workspace',
+                policyID: fakePolicy.id,
+                targetPolicyID,
+                welcomeNote: 'Join my policy',
+                personalDetailsByLogins: {},
+                parts: {expenses: true, categories: true},
+                policyCategories,
+                localCurrency: 'USD',
+            });
+            await waitForBatchedUpdates();
+
+            const policy = await getOnyxValue(`${ONYXKEYS.COLLECTION.POLICY}${targetPolicyID}`);
+            expect(policy?.areRulesEnabled).toBe(expectedAreRulesEnabled);
 
             await mockFetch?.resume?.();
             await waitForBatchedUpdates();

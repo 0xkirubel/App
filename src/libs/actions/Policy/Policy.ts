@@ -3478,6 +3478,7 @@ function buildOptimisticDuplicatePolicy(
     const isOverviewFeatureSelected = duplicatedParts?.overview;
     const isTravelFeatureSelected = duplicatedParts?.travel;
     const duplicatedOutputCurrency = isOverviewFeatureSelected ? sourcePolicy?.outputCurrency : duplicatedLocalCurrency;
+    const duplicateAreRulesEnabled = isRulesFeatureSelected ? PolicyUtils.arePolicyRulesEnabled(sourcePolicy, policyOptions.policyCategories) : false;
 
     const filterPendingDeleteData = <T>(data?: Record<string, T>): Record<string, T> | undefined =>
         data
@@ -3516,7 +3517,7 @@ function buildOptimisticDuplicatePolicy(
         areTagsEnabled: isTagsFeatureSelected,
         areDistanceRatesEnabled: isDistanceRatesFeatureSelected,
         areInvoicesEnabled: isInvoicesFeatureSelected,
-        areRulesEnabled: isRulesFeatureSelected,
+        areRulesEnabled: duplicateAreRulesEnabled,
         areWorkflowsEnabled: isWorkflowsFeatureSelected,
         areReportFieldsEnabled: isReportsFeatureSelected ? sourcePolicy?.areReportFieldsEnabled : false,
         areInvoiceFieldsEnabled: isInvoiceFieldsFeatureSelected ? sourcePolicy?.areInvoiceFieldsEnabled : false,
@@ -3594,6 +3595,8 @@ function buildDuplicatePolicyData(policy: Policy, options: DuplicatePolicyDataOp
     const isMemberOptionSelected = parts?.people;
     const isCategoriesOptionSelected = parts?.categories;
     const isOverviewOptionSelected = parts?.overview;
+    const isRulesOptionSelected = parts?.expenses;
+    const duplicateAreRulesEnabled = isRulesOptionSelected ? PolicyUtils.arePolicyRulesEnabled(policy, policyCategories) : false;
 
     const outputCurrency = isOverviewOptionSelected && policy?.outputCurrency ? policy?.outputCurrency : localCurrency;
 
@@ -3720,6 +3723,7 @@ function buildDuplicatePolicyData(policy: Policy, options: DuplicatePolicyDataOp
                     areInvoiceFieldsEnabled: null,
                     rulesDocumentURL: null,
                 },
+                areRulesEnabled: duplicateAreRulesEnabled,
             },
         },
         {
