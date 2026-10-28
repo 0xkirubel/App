@@ -15,8 +15,10 @@ import getCurrencyForNonUSDBankAccount from '@pages/ReimbursementAccount/NonUSD/
 import getInitialSubStepForBankInfoStep from '@pages/ReimbursementAccount/NonUSD/utils/getInitialSubStepForBankInfoStep';
 import getInputKeysForBankInfoStep from '@pages/ReimbursementAccount/NonUSD/utils/getInputKeysForBankInfoStep';
 
+import shouldSkipCorpayBankAccountCreation from '@pages/ReimbursementAccount/NonUSD/utils/shouldSkipCorpayBankAccountCreation';
 import {clearReimbursementAccountBankCreation, createCorpayBankAccount, getCorpayBankAccountFields} from '@userActions/BankAccounts';
 import {clearErrors} from '@userActions/FormActions';
+import {hideBankAccountErrors} from '@userActions/ReimbursementAccount';
 
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
@@ -54,6 +56,12 @@ function BankInfo({onBackButtonPress, onSubmit, policyID, stepNames, backTo}: No
     const isSubmittingRef = useRef(false);
 
     const submit = () => {
+        if (shouldSkipCorpayBankAccountCreation(reimbursementAccount?.achData, policyID)) {
+            hideBankAccountErrors();
+            onSubmit();
+            return;
+        }
+
         const {formFields, isLoading, isSuccess, ...corpayData} = corpayFields ?? {};
 
         isSubmittingRef.current = true;
