@@ -24,6 +24,7 @@ import * as LoginUtils from '@libs/LoginUtils';
 import Navigation from '@libs/Navigation/Navigation';
 import {isSupportAuthToken} from '@libs/Network/NetworkStore';
 import * as PersonalDetailsUtils from '@libs/PersonalDetailsUtils';
+import invalidateAvatarImageCache from '@libs/invalidateAvatarImageCache';
 import * as UserAvatarUtils from '@libs/UserAvatarUtils';
 
 import type {Country} from '@src/CONST';
@@ -365,6 +366,20 @@ function isDefaultAvatarResult(file: File | CustomRNImageManipulatorResult | Def
     return 'customExpensifyAvatarID' in file && typeof file.customExpensifyAvatarID === 'string';
 }
 
+/** Clears native cache entries for a custom uploaded avatar URL before the bytes behind that URL change. */
+function invalidateCachedUploadedAvatar(avatarURL: string | undefined) {
+    if (
+        typeof avatarURL !== 'string' ||
+        !avatarURL.startsWith('http') ||
+        !CONST.CLOUDFRONT_DOMAIN_REGEX.test(avatarURL) ||
+        UserAvatarUtils.isGeneratedLetterAvatarURL(avatarURL)
+    ) {
+        return;
+    }
+
+    invalidateAvatarImageCache(avatarURL);
+}
+
 /**
  * Updates the user's avatar image
  */
@@ -415,6 +430,8 @@ function updateAvatar(
     ];
 
     const parameters: UpdateUserAvatarParams = isDefaultAvatarResult(file) ? {customExpensifyAvatarID: file.customExpensifyAvatarID} : {file};
+
+    invalidateCachedUploadedAvatar(currentUserPersonalDetails.avatar);
 
     API.write(WRITE_COMMANDS.UPDATE_USER_AVATAR, parameters, {
         optimisticData,
@@ -483,6 +500,10 @@ function updateAvatarStyle(
 
     const parameters: UpdateUserAvatarParams = {color};
 
+    if (willClearAvatar) {
+        invalidateCachedUploadedAvatar(currentUserPersonalDetails.avatar);
+    }
+
     API.write(WRITE_COMMANDS.UPDATE_USER_AVATAR, parameters, {
         optimisticData,
         successData,
@@ -522,6 +543,8 @@ function deleteAvatar(currentUserPersonalDetails: Pick<CurrentUserPersonalDetail
             },
         }),
     ];
+
+    invalidateCachedUploadedAvatar(currentUserPersonalDetails.avatar);
 
     API.write(WRITE_COMMANDS.DELETE_USER_AVATAR, null, {
         optimisticData,

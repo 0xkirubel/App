@@ -13,6 +13,15 @@ describe('getImageRecyclingKey', () => {
         expect(getImageRecyclingKey({uri: 'https://example.com/image.png'})).toBe('https://example.com/image.png');
     });
 
+    test('prefers cacheKey over uri so list rows drop stale bitmaps for reused avatar URLs', () => {
+        expect(
+            getImageRecyclingKey({
+                uri: 'https://example.com/avatar.jpeg',
+                cacheKey: 'https://example.com/avatar.jpeg#file://crop.jpg',
+            }),
+        ).toBe('https://example.com/avatar.jpeg#file://crop.jpg');
+    });
+
     test('ignores the URI fragment so a forced reload of the same file keeps the key', () => {
         // Given a local receipt that was upgraded in place, so its URI only gains a fragment to force a reload
         const original = {uri: 'file:///receipts/receipt.jpg'};

@@ -33,6 +33,10 @@ const mockPersonalDetailsUtils = jest.mocked(PersonalDetailsUtils);
 jest.mock('@libs/UserAvatarUtils');
 const mockUserAvatarUtils = jest.mocked(UserAvatarUtils);
 
+jest.mock('@libs/invalidateAvatarImageCache');
+import invalidateAvatarImageCache from '@libs/invalidateAvatarImageCache';
+const mockInvalidateAvatarImageCache = jest.mocked(invalidateAvatarImageCache);
+
 describe('actions/PersonalDetails', () => {
     beforeAll(() => {
         Onyx.init({
@@ -592,6 +596,26 @@ describe('actions/PersonalDetails', () => {
     });
 
     describe('updateAvatar', () => {
+        it('invalidates the native avatar cache before uploading over an existing CloudFront photo', async () => {
+            const uploadedAvatarURL = 'https://d1wpcgnaa73g0y.cloudfront.net/abc123.jpeg';
+            const mockFile = createMock<File>({
+                uri: 'file://test-avatar.jpg',
+                name: 'test-avatar.jpg',
+            });
+            const currentUserPersonalDetail: Pick<CurrentUserPersonalDetails, 'avatarThumbnail' | 'avatar' | 'accountID'> = {
+                avatar: uploadedAvatarURL,
+                avatarThumbnail: `${uploadedAvatarURL.slice(0, -5)}_128.jpeg`,
+                accountID: 123,
+            };
+
+            mockUserAvatarUtils.isGeneratedLetterAvatarURL.mockReturnValue(false);
+
+            PersonalDetailsActions.updateAvatar(mockFile, currentUserPersonalDetail);
+            await waitForBatchedUpdates();
+
+            expect(mockInvalidateAvatarImageCache).toHaveBeenCalledWith(uploadedAvatarURL);
+        });
+
         it('should call API.write with correct parameters and optimistic data for File', async () => {
             const mockFile = createMock<File>({
                 uri: 'file://test-avatar.jpg',
@@ -876,6 +900,26 @@ describe('actions/PersonalDetails', () => {
     });
 
     describe('deleteAvatar', () => {
+        it('invalidates the native avatar cache before removing an uploaded CloudFront photo', async () => {
+            const uploadedAvatarURL = 'https://d1wpcgnaa73g0y.cloudfront.net/abc123.jpeg';
+            const currentUserPersonalDetail: Pick<CurrentUserPersonalDetails, 'fallbackIcon' | 'avatar' | 'accountID' | 'email' | 'firstName' | 'lastName'> = {
+                avatar: uploadedAvatarURL,
+                fallbackIcon: null,
+                accountID: 123,
+                email: 'test@test.te',
+                firstName: 'Jane',
+                lastName: 'Smith',
+            };
+
+            mockUserAvatarUtils.getDefaultAvatarURL.mockReturnValue('https://d2k5nsl2zxldvw.cloudfront.net/images/avatars/default-avatar_7.png');
+            mockUserAvatarUtils.isGeneratedLetterAvatarURL.mockReturnValue(false);
+
+            PersonalDetailsActions.deleteAvatar(currentUserPersonalDetail);
+            await waitForBatchedUpdates();
+
+            expect(mockInvalidateAvatarImageCache).toHaveBeenCalledWith(uploadedAvatarURL);
+        });
+
         it('should call API.write with correct parameters and optimistic data', async () => {
             const currentUserPersonalDetail: Pick<CurrentUserPersonalDetails, 'fallbackIcon' | 'avatar' | 'accountID' | 'email' | 'firstName' | 'lastName'> = {
                 avatar: 'current-avatar.jpg',

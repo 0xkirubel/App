@@ -13,6 +13,9 @@ type AvatarImageProps = AvatarPrimitivesCommonProps & {
     /** URL of the remote avatar image. */
     avatarSource: string;
 
+    /** Optional expo-image cache key when the bytes behind `avatarSource` changed but the URL did not. */
+    cacheKey?: string;
+
     /** Callback invoked when the avatar image fails to load. */
     onImageError: () => void;
 
@@ -24,7 +27,7 @@ type AvatarImageProps = AvatarPrimitivesCommonProps & {
 };
 
 /** Renders an avatar as a remote image. */
-function AvatarImage({avatarSource, size, shape, imageStyles, imageContainerAdditionalStyles, onImageError}: AvatarImageProps) {
+function AvatarImage({avatarSource, cacheKey, size, shape, imageStyles, imageContainerAdditionalStyles, onImageError}: AvatarImageProps) {
     const styles = useThemeStyles();
     const StyleUtils = useStyleUtils();
     const imageStyle = [StyleUtils.getAvatarStyle(size), imageStyles, styles.noBorderRadius];
@@ -35,7 +38,7 @@ function AvatarImage({avatarSource, size, shape, imageStyles, imageContainerAddi
             {/* eslint-disable-next-line react-native-a11y/has-valid-accessibility-ignores-invert-colors -- Custom Image wrapper does not support this prop. */}
             <Image
                 key={size}
-                source={{uri: avatarSource}}
+                source={cacheKey ? {uri: avatarSource, cacheKey} : {uri: avatarSource}}
                 style={imageStyle}
                 onError={onImageError}
                 cachePolicy="memory-disk"

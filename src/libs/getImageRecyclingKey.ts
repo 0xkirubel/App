@@ -30,6 +30,9 @@ function getImageRecyclingKey(source: ImageSourceParam): string | undefined {
     }
 
     if (typeof source === 'object' && 'uri' in source && source.uri) {
+        if ('cacheKey' in source && typeof source.cacheKey === 'string' && source.cacheKey) {
+            return source.cacheKey;
+        }
         return withoutFragment(source.uri);
     }
 

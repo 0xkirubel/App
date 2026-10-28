@@ -75,6 +75,9 @@ function UserAvatar({
     const avatarSource = useFallBackAvatar ? fallbackAvatar : (optimizedSource ?? fallbackAvatar);
 
     if (typeof avatarSource === 'string') {
+        const uploadedAvatarCacheKey =
+            typeof fallbackIcon === 'string' && !!fallbackIcon && fallbackIcon !== avatarSource && avatarSource.startsWith('http') ? `${avatarSource}#${fallbackIcon}` : undefined;
+
         return (
             <AvatarContainer
                 containerStyles={containerStyles}
@@ -82,6 +85,7 @@ function UserAvatar({
             >
                 <AvatarImage
                     avatarSource={avatarSource}
+                    cacheKey={uploadedAvatarCacheKey}
                     size={size}
                     shape={CONST.AVATAR_SHAPE.CIRCLE}
                     imageStyles={imageStyles}
