@@ -10627,6 +10627,72 @@ function generateIsEmptyReport(report: OnyxEntry<Report>, isReportArchived: bool
     return !lastVisibleMessage.lastMessageText;
 }
 
+function isReportActionEligibleForManualUnreadAnchor(action: ReportAction, currentUserAccountID: number | undefined): boolean {
+    if (isDeletedAction(action)) {
+        return false;
+    }
+
+    if (action.actorAccountID === currentUserAccountID) {
+        return false;
+    }
+
+    if (isWhisperAction(action) && action.actionName !== CONST.REPORT.ACTIONS.TYPE.ACTIONABLE_MENTION_WHISPER) {
+        return false;
+    }
+
+    return true;
+}
+
+/** True when another user's visible action exists after lastReadTime (same filter as markCommentAsUnread). */
+function hasUnreadReportActionFromOtherUserAfterTime(reportIDs: string[], lastReadTime: string, currentUserAccountID: number | undefined): boolean {
+    for (const id of reportIDs) {
+        if (!id) {
+            continue;
+        }
+
+        const actions = allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${id}`] ?? {};
+        for (const action of Object.values(actions)) {
+            if (!isReportActionEligibleForManualUnreadAnchor(action, currentUserAccountID)) {
+                continue;
+            }
+
+            if (action.created > lastReadTime) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Auto-read must not undo a deliberate mark-as-unread until a newer message from someone else arrives.
+ * Returns true when readNewestAction should be skipped for automatic (non-explicit) reads.
+ */
+function shouldBlockAutoReadForManualUnreadMarker(report: OnyxEntry<Report>, reportID: string, currentUserAccountID: number | undefined): boolean {
+    const manuallyMarkedUnreadReportActionID = report?.manuallyMarkedUnreadReportActionID;
+    if (!manuallyMarkedUnreadReportActionID) {
+        return false;
+    }
+
+    const actions = allReportActions?.[`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`] ?? {};
+    const markedAction = actions[manuallyMarkedUnreadReportActionID];
+    const markedCreated = markedAction?.created ?? '';
+    const lastReadTime = report?.lastReadTime ?? '';
+
+    for (const action of Object.values(actions)) {
+        if (!isReportActionEligibleForManualUnreadAnchor(action, currentUserAccountID)) {
+            continue;
+        }
+
+        if (action.created > lastReadTime && action.created > markedCreated) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // We need oneTransactionThreadReport to get the correct last visible action created
 function isUnread(report: OnyxEntry<Report>, oneTransactionThreadReport: OnyxEntry<Report>, isReportArchived: boolean | undefined, derivedIsEmptyReport: boolean | undefined): boolean {
     if (!report) {
@@ -10653,7 +10719,16 @@ function isUnread(report: OnyxEntry<Report>, oneTransactionThreadReport: OnyxEnt
     const drivingActorAccountID =
         (oneTransactionThreadReport?.lastVisibleActionCreated ?? '') > (report?.lastVisibleActionCreated ?? '') ? oneTransactionThreadReport?.lastActorAccountID : report?.lastActorAccountID;
 
-    if (isUnreadFromTimestamp && drivingActorAccountID === deprecatedCurrentUserAccountID && !(lastReadTime < lastMentionedTime)) {
+    if (
+        isUnreadFromTimestamp &&
+        drivingActorAccountID === deprecatedCurrentUserAccountID &&
+        !(lastReadTime < lastMentionedTime) &&
+        !hasUnreadReportActionFromOtherUserAfterTime(
+            [report.reportID, oneTransactionThreadReport?.reportID].filter((id): id is string => !!id),
+            lastReadTime,
+            deprecatedCurrentUserAccountID,
+        )
+    ) {
         return false;
     }
 
@@ -15481,6 +15556,7 @@ export {
     chatIncludesChronosWithID,
     chatIncludesConcierge,
     doesReportBelongToWorkspace,
+    shouldBlockAutoReadForManualUnreadMarker,
     shouldEnableNegative,
     findLastAccessedReport,
     findSelfDMReportID,

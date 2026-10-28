@@ -11348,6 +11348,77 @@ describe('ReportUtils', () => {
             expect(isUnread(report, transactionThreadReport, false, undefined)).toBe(false);
         });
 
+        it('returns true after mark-as-unread when the current user sent the newest visible message but an older message from someone else is still unread', async () => {
+            // Given a chat where the current user replied last, then marked unread back to the other user's message
+            const otherUserAccountID = 999;
+            const reportID = '101234-mark-unread';
+            const otherUserActionID = 'action-other';
+            const report = {
+                ...LHNTestUtils.getFakeReport(),
+                reportID,
+                lastReadTime: '2024-03-01 11:59:59.999',
+                lastVisibleActionCreated: '2024-03-01 12:00:02.000',
+                lastActorAccountID: currentUserAccountID,
+            };
+            const reportActions = {
+                [otherUserActionID]: {
+                    reportActionID: otherUserActionID,
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    actorAccountID: otherUserAccountID,
+                    created: '2024-03-01 12:00:00.000',
+                    message: [{type: 'COMMENT', text: 'Hi'}],
+                },
+                self: {
+                    reportActionID: 'self',
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    actorAccountID: currentUserAccountID,
+                    created: '2024-03-01 12:00:02.000',
+                    message: [{type: 'COMMENT', text: 'Reply'}],
+                },
+            };
+
+            // When the report actions are loaded on this client
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`, report);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`, reportActions);
+
+            // Then isUnread respects the rolled-back lastReadTime instead of treating self-authorship as read
+            expect(isUnread(report, undefined, false, false)).toBe(true);
+        });
+
+        it('returns false when the current user replied after the other message was already read', async () => {
+            // Given the user read the other message, then sent their own reply
+            const otherUserAccountID = 999;
+            const reportID = '101234-self-reply-read';
+            const report = {
+                ...LHNTestUtils.getFakeReport(),
+                reportID,
+                lastReadTime: '2024-03-01 12:00:02.000',
+                lastVisibleActionCreated: '2024-03-01 12:00:02.000',
+                lastActorAccountID: currentUserAccountID,
+            };
+            const reportActions = {
+                other: {
+                    reportActionID: 'other',
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    actorAccountID: otherUserAccountID,
+                    created: '2024-03-01 12:00:00.000',
+                    message: [{type: 'COMMENT', text: 'Hi'}],
+                },
+                self: {
+                    reportActionID: 'self',
+                    actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                    actorAccountID: currentUserAccountID,
+                    created: '2024-03-01 12:00:02.000',
+                    message: [{type: 'COMMENT', text: 'Reply'}],
+                },
+            };
+
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${reportID}`, report);
+            await Onyx.set(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS}${reportID}`, reportActions);
+
+            expect(isUnread(report, undefined, false, false)).toBe(false);
+        });
+
         it('returns false when derivedIsEmptyReport is true (empty report is never unread)', () => {
             const report = {
                 ...LHNTestUtils.getFakeReport(),

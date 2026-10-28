@@ -186,6 +186,7 @@ import {
     replaceLocalAttachmentReferences,
     restoreAttachmentAnchorAttributes,
     restoreAttachmentAnchorLabels,
+    shouldBlockAutoReadForManualUnreadMarker,
 } from '@libs/ReportUtils';
 import {buildOptimisticSnapshotData, getCurrentSearchQueryJSON} from '@libs/SearchQueryUtils';
 import playSound, {SOUNDS} from '@libs/Sound';
@@ -3293,6 +3294,11 @@ function readNewestAction(reportID: string | undefined, isReportActionsLoaded: b
         return;
     }
 
+    const report = allReports?.[`${ONYXKEYS.COLLECTION.REPORT}${reportID}`];
+    if (!shouldResetUnreadMarker && report && shouldBlockAutoReadForManualUnreadMarker(report, reportID, undefined)) {
+        return;
+    }
+
     const lastReadTime = getDBTimeWithSkew();
 
     // Deliberately leaves `manuallyMarkedUnreadReportActionID` alone so an auto-read doesn't wipe a marker the
@@ -3303,6 +3309,7 @@ function readNewestAction(reportID: string | undefined, isReportActionsLoaded: b
             key: `${ONYXKEYS.COLLECTION.REPORT}${reportID}`,
             value: {
                 lastReadTime,
+                ...(shouldResetUnreadMarker ? {manuallyMarkedUnreadReportActionID: null} : {}),
             },
         },
     ];
@@ -3379,7 +3386,7 @@ function markCommentAsUnread(reportID: string | undefined, reportActions: OnyxEn
 
     const reportValue = {
         lastReadTime,
-        manuallyMarkedUnreadReportActionID: reportAction?.reportActionID ?? null,
+        manuallyMarkedUnreadReportActionID: reportAction?.reportActionID ?? latestReportActionFromOtherUsers?.reportActionID ?? null,
         ...(lastActorAccountID && {lastActorAccountID}),
     };
 

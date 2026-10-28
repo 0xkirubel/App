@@ -345,7 +345,7 @@ function useMarkAsRead({
 
     const markNewestActionAsRead = () => {
         readActionSkippedRef.current = false;
-        readNewestAction(reportID, true);
+        readNewestAction(reportID, true, true);
     };
 
     const completeSkippedMarkAsRead = () => {
