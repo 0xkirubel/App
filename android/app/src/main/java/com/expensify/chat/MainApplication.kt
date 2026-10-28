@@ -50,9 +50,10 @@ class MainApplication : MultiDexApplication(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
 
-        // Plaid's LinkActivity calls setRequestedOrientation(PORTRAIT) in its own onCreate(),
-        // which forces the UI to portrait even when the device is in landscape. We override it
-        // here so Plaid can render in whichever orientation the device is actually in.
+        // Plaid's LinkActivity calls setRequestedOrientation(PORTRAIT) in its own onCreate().
+        // #87752 cleared that lock so Plaid could follow device landscape (with configChanges on LinkActivity
+        // to avoid the white-screen recreate). On phone-sized screens Plaid's WebView layout cannot fit the
+        // keyboard in landscape, so we only clear the portrait lock on tablet-sized devices.
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -63,12 +64,13 @@ class MainApplication : MultiDexApplication(), ReactApplication {
                         PrivacyCover.applyTaskDescription(activity)
                     }
                 }
-                if (activity.javaClass.name == "com.plaid.internal.link.LinkActivity") {
-                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                }
+                applyPlaidLinkActivityOrientationPolicy(activity)
             }
             override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
+                // Plaid may re-apply portrait when the activity resumes; re-run the policy so tablets stay unlocked.
+                applyPlaidLinkActivityOrientationPolicy(activity)
+            }
             override fun onActivityPaused(activity: Activity) {}
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
@@ -126,5 +128,24 @@ class MainApplication : MultiDexApplication(), ReactApplication {
         return manager.runningAppProcesses.any {
             it.pid == pid && it.processName.endsWith(":onfido_process")
         }
+    }
+
+    private fun applyPlaidLinkActivityOrientationPolicy(activity: Activity) {
+        if (activity.javaClass.name != "com.plaid.internal.link.LinkActivity") {
+            return
+        }
+
+        if (isTabletSizedDevice(activity.resources.configuration)) {
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    private fun isTabletSizedDevice(configuration: Configuration): Boolean {
+        return configuration.smallestScreenWidthDp >= TABLET_SMALLEST_SCREEN_WIDTH_DP
+    }
+
+    companion object {
+        // Android's standard sw600dp tablet bucket; phones stay on Plaid's portrait lock.
+        private const val TABLET_SMALLEST_SCREEN_WIDTH_DP = 600
     }
 }
