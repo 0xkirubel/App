@@ -12673,20 +12673,15 @@ function hasUpdatedTotal(report: OnyxInputOrEntry<Report>, policy: OnyxInputOrEn
 }
 
 /**
- * Return held and full amount formatted with used currency
+ * Returns report totals used for hold-aware approve/pay actions. When held transactions are present but the
+ * report's unheld* fields still match the full totals (common for non-holders until OpenReport), subtract the
+ * loaded held transactions from the backend totals instead of trusting the stale unheld fields.
  */
-function getNonHeldAndFullAmount(
+function getUnheldTotalsForMoneyRequestWithHolds(
     iouReport: OnyxEntry<Report>,
     shouldExcludeNonReimbursables: boolean,
     allReportTransactions: Transaction[],
-    convertToDisplayString: CurrencyListActionsContextType['convertToDisplayString'],
-): NonHeldAndFullAmount {
-    // if the report is an expense report, the total amount should be negated
-    const coefficient = isExpenseReport(iouReport) ? -1 : 1;
-
-    // Prefer the freshly computed totals from the backend. The stored total column can lag behind the
-    // sum of the underlying transactions, so deriving from reimbursableTotal/nonReimbursableTotal keeps
-    // displayed amounts in sync with what the user actually entered.
+): {total: number; unheldTotal: number; unheldReimbursableTotal: number} {
     const reimbursableTotal = getReimbursableTotal(iouReport);
     const unheldReimbursableTotal = getUnheldReimbursableTotal(iouReport);
 
@@ -12700,20 +12695,67 @@ function getNonHeldAndFullAmount(
         unheldTotal = iouReport?.unheldTotal ?? unheldReimbursableTotal + (iouReport?.unheldNonReimbursableTotal ?? 0);
     }
 
+    const hasHeldExpensesLocal = hasHeldExpenses(allReportTransactions);
+    const reportUnheldTotalsMatchFullTotals = shouldExcludeNonReimbursables
+        ? Math.abs(unheldReimbursableTotal) === Math.abs(reimbursableTotal)
+        : Math.abs(unheldTotal) === Math.abs(total);
+
+    if (!hasHeldExpensesLocal || !reportUnheldTotalsMatchFullTotals || allReportTransactions.length === 0) {
+        return {total, unheldTotal, unheldReimbursableTotal};
+    }
+
+    const isExpense = isExpenseReport(iouReport);
+    let heldTotal = 0;
+    let heldReimbursableTotal = 0;
+
+    for (const transaction of allReportTransactions) {
+        if (!isOnHoldTransactionUtils(transaction)) {
+            continue;
+        }
+
+        const transactionAmount = getTransactionAmount(transaction, isExpense);
+        heldTotal += transactionAmount;
+        if (transaction.reimbursable) {
+            heldReimbursableTotal += transactionAmount;
+        }
+    }
+
+    if (shouldExcludeNonReimbursables) {
+        const adjustedUnheldReimbursableTotal = unheldReimbursableTotal - heldReimbursableTotal;
+        return {
+            total: reimbursableTotal,
+            unheldTotal: adjustedUnheldReimbursableTotal,
+            unheldReimbursableTotal: adjustedUnheldReimbursableTotal,
+        };
+    }
+
+    return {
+        total,
+        unheldTotal: unheldTotal - heldTotal,
+        unheldReimbursableTotal: unheldReimbursableTotal - heldReimbursableTotal,
+    };
+}
+
+/**
+ * Return held and full amount formatted with used currency
+ */
+function getNonHeldAndFullAmount(
+    iouReport: OnyxEntry<Report>,
+    shouldExcludeNonReimbursables: boolean,
+    allReportTransactions: Transaction[],
+    convertToDisplayString: CurrencyListActionsContextType['convertToDisplayString'],
+): NonHeldAndFullAmount {
+    // if the report is an expense report, the total amount should be negated
+    const coefficient = isExpenseReport(iouReport) ? -1 : 1;
+
+    const {total, unheldTotal} = getUnheldTotalsForMoneyRequestWithHolds(iouReport, shouldExcludeNonReimbursables, allReportTransactions);
+
     const adjustedUnheldTotal = unheldTotal * coefficient;
     const adjustedTotal = total * coefficient;
 
-    // For the "approve unheld" option to be valid, we need:
-    // 1. There should be held expenses
-    // 2. For expense reports with negative totals, we need to ensure the unheld amount is valid
-    //    by checking that the absolute values are meaningful and different
     const hasHeldExpensesLocal = hasHeldExpenses(allReportTransactions);
     const hasValidNonHeldAmount =
-        hasHeldExpensesLocal &&
-        // For normal cases (positive amounts or IOU reports)
-        (adjustedUnheldTotal >= 0 ||
-            // For expense reports with negative amounts, check if amounts are meaningful
-            (isExpenseReport(iouReport) && Math.abs(adjustedUnheldTotal) > 0 && Math.abs(adjustedUnheldTotal) !== Math.abs(adjustedTotal)));
+        hasHeldExpensesLocal && Math.abs(adjustedUnheldTotal) > 0 && Math.abs(adjustedUnheldTotal) !== Math.abs(adjustedTotal);
 
     return {
         nonHeldAmount: convertToDisplayString(adjustedUnheldTotal, iouReport?.currency),
@@ -15521,6 +15563,7 @@ export {
     getNonHeldAndFullAmount,
     getReimbursableTotal,
     getUnheldReimbursableTotal,
+    getUnheldTotalsForMoneyRequestWithHolds,
     getOneOnOneChatParticipants,
     getOptimisticDataForAncestors,
     getOriginalReportID,

@@ -36,10 +36,9 @@ import {
     buildOptimisticUnapprovedReportAction,
     getAllHeldTransactions as getAllHeldTransactionsReportUtils,
     getNextApproverAccountID,
-    getReimbursableTotal,
     getReportOrDraftReport,
     getReportTransactions,
-    getUnheldReimbursableTotal,
+    getUnheldTotalsForMoneyRequestWithHolds,
     hasHeldExpenses as hasHeldExpensesReportUtils,
     hasOutstandingChildRequest,
 } from '@libs/ReportUtils';
@@ -176,8 +175,8 @@ function approveMoneyRequest(params: ApproveMoneyRequestFunctionParams) {
     }
 
     const reportTransactions = getReportTransactions(expenseReport.reportID);
-    const unheldTotal = getUnheldReimbursableTotal(expenseReport) + (expenseReport.unheldNonReimbursableTotal ?? 0);
-    let total = getReimbursableTotal(expenseReport) + (expenseReport.nonReimbursableTotal ?? 0);
+    const {total: reportTotal, unheldTotal} = getUnheldTotalsForMoneyRequestWithHolds(expenseReport, false, reportTransactions);
+    let total = reportTotal;
     const hasHeldExpenses = hasHeldExpensesReportUtils(reportTransactions);
     if (hasHeldExpenses && !full && !!unheldTotal) {
         total = unheldTotal;
