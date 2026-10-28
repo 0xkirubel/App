@@ -1,4 +1,5 @@
 import {navigateAfterOnboarding, navigateAfterOnboardingWithMicrotaskQueue, setDeepLinkToOpenAfterOnboarding} from '@libs/navigateAfterOnboarding';
+import {parkSignedOutShareForAfterOnboardingLanding} from '@libs/Navigation/helpers/signedOutAndroidShareIntent';
 import dismissOnboardingModalBeforeExit from '@libs/Navigation/helpers/OnboardingNavigationUtils';
 import Navigation from '@libs/Navigation/Navigation';
 import type * as ReportUtils from '@libs/ReportUtils';
@@ -136,6 +137,20 @@ describe('navigateAfterOnboarding', () => {
         finishDismissal?.();
 
         expect(navigate).toHaveBeenCalledWith(ROUTES.HOME, undefined);
+    });
+
+    it('should open a parked signed-out share after the default onboarding landing', () => {
+        // Given a gallery share parked while the user was still signed out
+        const navigate = jest.spyOn(Navigation, 'navigate');
+        jest.spyOn(Navigation, 'setNavigationActionToMicrotaskQueue').mockImplementation((navigationAction) => navigationAction());
+        parkSignedOutShareForAfterOnboardingLanding();
+
+        // When onboarding finishes through the microtask queue
+        navigateAfterOnboardingWithMicrotaskQueue(false, true, '', {}, false, undefined, ONBOARDING_ADMINS_CHAT_REPORT_ID);
+
+        // Then the normal landing runs first and the share modal opens on top of it
+        expect(navigate).toHaveBeenCalledWith(ROUTES.REPORT_WITH_ID.getRoute(ONBOARDING_ADMINS_CHAT_REPORT_ID), undefined);
+        expect(navigate).toHaveBeenCalledWith(ROUTES.SHARE_ROOT, {waitForTransition: true});
     });
 
     it('should preserve the topmost report if onboardingAdminsChatReportID is not provided on larger screens', () => {

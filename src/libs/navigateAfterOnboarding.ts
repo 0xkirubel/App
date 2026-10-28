@@ -13,6 +13,7 @@ import {setDisableDismissOnEscape} from './actions/Modal';
 import SidePanelActions from './actions/SidePanel';
 import {setOnboardingRHPVariant} from './actions/Welcome';
 import Log from './Log';
+import {openParkedSignedOutShareAfterOnboardingLanding} from './Navigation/helpers/signedOutAndroidShareIntent';
 import isReportTopmostSplitNavigator from './Navigation/helpers/isReportTopmostSplitNavigator';
 import dismissOnboardingModalBeforeExit from './Navigation/helpers/OnboardingNavigationUtils';
 import shouldOpenOnAdminRoom from './Navigation/helpers/shouldOpenOnAdminRoom';
@@ -199,6 +200,7 @@ function navigateAfterOnboardingWithMicrotaskQueue(
                 shouldPreventOpenAdminRoom,
                 options,
             );
+            openParkedSignedOutShareAfterOnboardingLanding();
         });
     });
 }
@@ -228,6 +230,7 @@ function navigateToSubmitWorkspaceAfterOnboardingWithMicrotaskQueue(policyID?: s
     dismissOnboardingModalBeforeExit(() => {
         Navigation.setNavigationActionToMicrotaskQueue(() => {
             navigateToSubmitWorkspaceAfterOnboarding(policyID, shouldUseNarrowLayout);
+            openParkedSignedOutShareAfterOnboardingLanding();
         });
     });
 }

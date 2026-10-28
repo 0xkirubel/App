@@ -11,6 +11,7 @@ import getStateFromPath from '@libs/Navigation/helpers/getStateFromPath';
 import {hasJoinWorkspaceTaskParam} from '@libs/Navigation/helpers/isJoinWorkspaceTaskPath';
 import {isOnboardingFlowName} from '@libs/Navigation/helpers/isNavigatorName';
 import normalizePath from '@libs/Navigation/helpers/normalizePath';
+import {isShareRootRoute, parkSignedOutShareForAfterOnboardingLanding} from '@libs/Navigation/helpers/signedOutAndroidShareIntent';
 import shouldOpenOnAdminRoom from '@libs/Navigation/helpers/shouldOpenOnAdminRoom';
 import swapBackgroundTabForRHPTarget from '@libs/Navigation/helpers/swapBackgroundTabForRHPTarget';
 import willRouteNavigateToRHP from '@libs/Navigation/helpers/willRouteNavigateToRHP';
@@ -508,6 +509,13 @@ function openReportFromDeepLink(
 
     // Navigate to the report after sign-in/sign-up.
     waitForUserSignIn().then(() => {
+        // A signed-out Android gallery share is not a report deep link. Park it once and resume after onboarding
+        // lands on the normal post-setup screen so we do not replace that landing (#102954) or race onboarding.
+        if (!isAuthenticated && isShareRootRoute(route)) {
+            parkSignedOutShareForAfterOnboardingLanding();
+            return;
+        }
+
         // A Submit-via-PDF secure access link must reach the report regardless of onboarding status: the report screen
         // is where JoinReportViaSecureLink runs, and onboarding is suppressed for secure-link visitors. The generic
         // handling below intentionally drops deep links for users who still need to onboard, so branch out first.
@@ -670,6 +678,11 @@ function openReportFromDeepLink(
                         };
 
                         if (isOnboardingFlowName(currentFocusedRoute?.name)) {
+                            if (isShareRootRoute(route)) {
+                                parkSignedOutShareForAfterOnboardingLanding();
+                                return;
+                            }
+
                             if (deferUntilAfterOnboarding()) {
                                 return;
                             }

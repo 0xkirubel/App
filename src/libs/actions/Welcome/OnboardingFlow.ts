@@ -1,6 +1,7 @@
 import type {OnboardingCompanySize, OnboardingMessage, OnboardingPurpose, OnboardingTask, OnboardingTaskLinks} from '@libs/buildOnboardingMessages';
 import {buildOnboardingMessages} from '@libs/buildOnboardingMessages';
 import getAdaptedStateFromPath from '@libs/Navigation/helpers/getAdaptedStateFromPath';
+import {hasParkedSignedOutShareForAfterOnboardingLanding} from '@libs/Navigation/helpers/signedOutAndroidShareIntent';
 import {config as linkingConfig} from '@libs/Navigation/linkingConfig/config';
 import Navigation, {navigationRef} from '@libs/Navigation/Navigation';
 
@@ -57,12 +58,15 @@ function startOnboardingFlow(startOnboardingFlowParams: GetOnboardingInitialPath
     const onboardingPath = startOnboardingFlowParams.resumePath ?? getOnboardingInitialPath(startOnboardingFlowParams);
     const adaptedState = getAdaptedStateFromPath(onboardingPath as Route, undefined, false);
     const rootStateRouteNamesSet = new Set(rootState.routes.map((route) => route.name));
+    const routesToKeep = hasParkedSignedOutShareForAfterOnboardingLanding()
+        ? rootState.routes.filter((route) => route.name !== NAVIGATORS.SHARE_MODAL_NAVIGATOR)
+        : rootState.routes;
 
     navigationRef.resetRoot({
         ...rootState,
         ...adaptedState,
         stale: true,
-        routes: [...rootState.routes, ...(adaptedState?.routes.filter((route) => !rootStateRouteNamesSet.has(route.name)) ?? [])],
+        routes: [...routesToKeep, ...(adaptedState?.routes.filter((route) => !rootStateRouteNamesSet.has(route.name)) ?? [])],
     } as PartialState<NavigationState>);
 }
 

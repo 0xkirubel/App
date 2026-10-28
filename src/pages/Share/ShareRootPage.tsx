@@ -97,7 +97,16 @@ function ShareRootPage() {
 
     const handleProcessFiles = () => {
         ShareActionHandler.processFiles((processedFiles) => {
-            const tempFile = Array.isArray(processedFiles) ? processedFiles.at(0) : (JSON.parse(processedFiles) as ShareTempFile);
+            let tempFile: ShareTempFile | undefined;
+            try {
+                tempFile = Array.isArray(processedFiles) ? processedFiles.at(0) : (JSON.parse(processedFiles) as ShareTempFile);
+            } catch (error: unknown) {
+                Log.warn('[ShareRootPage] Failed to parse share payload from native module', {error, processedFiles});
+                setErrorTitle(translate('attachmentPicker.attachmentError'));
+                setErrorMessage(translate('attachmentPicker.errorWhileSelectingCorruptedAttachment'));
+                return;
+            }
+
             if (errorTitle) {
                 return;
             }

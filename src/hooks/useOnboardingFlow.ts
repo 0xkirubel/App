@@ -3,6 +3,7 @@ import {useInitialURLState} from '@components/InitialURLContextProvider';
 import AccountUtils from '@libs/AccountUtils';
 import getCurrentUrl from '@libs/Navigation/currentUrl';
 import Navigation from '@libs/Navigation/Navigation';
+import {openParkedSignedOutShareAfterOnboardingLanding} from '@libs/Navigation/helpers/signedOutAndroidShareIntent';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
 import {isLoggingInAsNewUser} from '@libs/SessionUtils';
 import {hasSecureLinkKey} from '@libs/Url';
@@ -143,7 +144,12 @@ function useOnboardingFlowRouter() {
                     Navigation.isNavigationReady().then(() => {
                         startOnboardingFlow(buildOnboardingFlowParams(account, onboardingValues, onboardingCompanySize, onboardingPurposeSelected, onboardingInitialPath));
                     });
+                    return;
                 }
+
+                Navigation.isNavigationReady().then(() => {
+                    openParkedSignedOutShareAfterOnboardingLanding();
+                });
             },
         });
 
