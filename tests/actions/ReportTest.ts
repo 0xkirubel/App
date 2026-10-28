@@ -7839,6 +7839,33 @@ describe('actions/Report', () => {
             expect(Navigation.navigate).toHaveBeenCalledWith(ROUTES.REPORT_WITH_ID.getRoute(EXISTING_CHILD_REPORT.reportID));
         });
 
+        it('should open an existing typed child report without seeding a chat placeholder when it is not in Onyx', async () => {
+            const EXISTING_SUPPORT_TICKET_REPORT_ID = 'support-ticket-child-42';
+            const PARENT_REPORT = createRandomReport(1, undefined);
+            const PARENT_REPORT_ACTION: OnyxTypes.ReportAction = {
+                ...createRandomReportAction(REPORT_ACTION_ID),
+                reportActionID: '1',
+                actorAccountID: TEST_USER_ACCOUNT_ID,
+                actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                childType: CONST.REPORT.TYPE.SUPPORT_TICKET,
+                childReportID: EXISTING_SUPPORT_TICKET_REPORT_ID,
+            };
+
+            // Given a support ticket parent action whose ticket report has not been loaded into Onyx yet
+            await TestHelper.signInWithTestUser(TEST_USER_ACCOUNT_ID, TEST_USER_LOGIN);
+            Onyx.set(`${ONYXKEYS.COLLECTION.REPORT}${PARENT_REPORT_ID}`, PARENT_REPORT);
+            await waitForBatchedUpdates();
+
+            // When the user opens the child from the replies row
+            Report.navigateToAndOpenChildReport(undefined, PARENT_REPORT_ACTION, PARENT_REPORT, TEST_USER_ACCOUNT_ID, INTRO_SELECTED, undefined, undefined, undefined);
+            await waitForBatchedUpdates();
+
+            // Then navigation targets the ticket directly and no optimistic chat report is written under that ID
+            expect(Navigation.navigate).toHaveBeenCalledWith(ROUTES.REPORT_WITH_ID.getRoute(EXISTING_SUPPORT_TICKET_REPORT_ID));
+            const seededReport = await getOnyxValue(`${ONYXKEYS.COLLECTION.REPORT}${EXISTING_SUPPORT_TICKET_REPORT_ID}`);
+            expect(seededReport).toBeUndefined();
+        });
+
         it('should create optimistic report when childReportID is provided but report does not exist', async () => {
             const PARENT_REPORT = createRandomReport(1, undefined);
             const PARENT_REPORT_ACTION: OnyxTypes.ReportAction = {

@@ -2960,6 +2960,16 @@ function navigateToAndOpenChildReport(
     // TODO: This will be made required once all callers thread the value. Refactor issue: https://github.com/Expensify/App/issues/66425
     delegateAccountID?: number,
 ) {
+    const childReportID = childReport?.reportID ?? parentReportAction.childReportID;
+    const childType = parentReportAction.childType;
+    const isExistingTypedChildReport =
+        !childReport && !!childReportID && !!childType && childType !== CONST.REPORT.TYPE.CHAT;
+
+    if (isExistingTypedChildReport) {
+        Navigation.navigate(getReportRouteForCurrentContext({reportID: childReportID}));
+        return;
+    }
+
     const report =
         childReport ??
         createChildReport(
