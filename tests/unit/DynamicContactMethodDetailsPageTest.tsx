@@ -17,13 +17,16 @@ import {getGlobalFetchMock} from '../utils/TestHelper';
 import waitForBatchedUpdates from '../utils/waitForBatchedUpdates';
 import waitForBatchedUpdatesWithAct from '../utils/waitForBatchedUpdatesWithAct';
 
+const mockUseIsFocused = jest.fn(() => true);
+const mockUseDynamicBackPath = jest.fn(() => '');
+
 jest.mock('@react-navigation/native', () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const actualNav = jest.requireActual('@react-navigation/native');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return {
         ...actualNav,
-        useIsFocused: () => true,
+        useIsFocused: () => mockUseIsFocused(),
         useRoute: jest.fn(() => ({name: '', key: '', params: {}})),
         usePreventRemove: jest.fn(),
     };
@@ -36,7 +39,7 @@ jest.mock('@libs/Navigation/Navigation', () => ({
     goBack: jest.fn(),
 }));
 
-jest.mock('@hooks/useDynamicBackPath', () => jest.fn(() => ''));
+jest.mock('@hooks/useDynamicBackPath', () => jest.fn((...args: unknown[]) => mockUseDynamicBackPath(...args)));
 
 jest.mock('@components/DelegateNoAccessModalProvider', () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -88,6 +91,10 @@ describe('DynamicContactMethodDetailsPage', () => {
         const globalFetchMock = getGlobalFetchMock();
         global.fetch = globalFetchMock;
         mockFetch = globalFetchMock;
+        mockUseIsFocused.mockReturnValue(true);
+        mockUseDynamicBackPath.mockReturnValue('');
+        jest.mocked(Navigation.getActiveRoute).mockReturnValue('');
+        jest.mocked(Navigation.goBack).mockClear();
         return Onyx.clear().then(waitForBatchedUpdates);
     });
 
@@ -173,5 +180,61 @@ describe('DynamicContactMethodDetailsPage', () => {
         await waitForBatchedUpdatesWithAct();
 
         expect(Navigation.goBack).toHaveBeenCalled();
+    });
+
+    it('goes back to the contact methods list when the screen is refocused after being validated under another screen', async () => {
+        const contactMethodsListPath = 'settings/profile/contact-methods';
+        const detailsPath = `settings/profile/contact-methods/${encodeURIComponent(fakeEmail)}/details`;
+        const staleModalPath = `test-tools?backTo=${encodeURIComponent(detailsPath)}`;
+
+        mockUseIsFocused.mockReturnValue(false);
+        mockUseDynamicBackPath.mockReturnValue(staleModalPath);
+        jest.mocked(Navigation.getActiveRoute).mockReturnValue(detailsPath);
+
+        Onyx.merge(ONYXKEYS.SESSION, {email: fakeEmail});
+        Onyx.merge(ONYXKEYS.IS_LOADING_REPORT_DATA, false);
+        Onyx.merge(ONYXKEYS.LOGINS, {
+            [`1_${fakeEmail}`]: {
+                partnerID: 1,
+                partnerUserID: fakeEmail,
+                validatedDate: '',
+            },
+        });
+        await waitForBatchedUpdates();
+
+        const {rerender} = render(<ContactMethodDetailsPageRenderer />);
+        await waitForBatchedUpdatesWithAct();
+
+        await act(async () => {
+            Onyx.merge(ONYXKEYS.LOGINS, {
+                [`1_${fakeEmail}`]: {
+                    partnerID: 1,
+                    partnerUserID: fakeEmail,
+                    validatedDate: '2024-01-01',
+                },
+            });
+        });
+        await waitForBatchedUpdatesWithAct();
+
+        expect(Navigation.goBack).not.toHaveBeenCalled();
+
+        mockUseIsFocused.mockReturnValue(true);
+        rerender(<ContactMethodDetailsPageRenderer />);
+        await waitForBatchedUpdatesWithAct();
+
+        expect(Navigation.goBack).toHaveBeenCalledTimes(1);
+        expect(Navigation.goBack).toHaveBeenCalledWith(contactMethodsListPath);
+    });
+
+    it('does not go back when opening an already validated contact method', async () => {
+        Onyx.merge(ONYXKEYS.SESSION, {email: fakeEmail});
+        Onyx.merge(ONYXKEYS.IS_LOADING_REPORT_DATA, false);
+        Onyx.merge(ONYXKEYS.LOGINS, mockLoginList);
+        await waitForBatchedUpdates();
+
+        render(<ContactMethodDetailsPageRenderer />);
+        await waitForBatchedUpdatesWithAct();
+
+        expect(Navigation.goBack).not.toHaveBeenCalled();
     });
 });

@@ -36,6 +36,7 @@ import {isMobileSafari} from '@libs/Browser';
 import {canUseTouchScreen} from '@libs/DeviceCapabilities';
 import {getEarliestErrorField, getLatestErrorField} from '@libs/ErrorUtils';
 import getPathWithoutDynamicSuffix from '@libs/Navigation/helpers/dynamicRoutesUtils/getPathWithoutDynamicSuffix';
+import stripDynamicRouteSuffixFromPath from '@libs/Navigation/helpers/dynamicRoutesUtils/stripDynamicRouteSuffixFromPath';
 import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackScreenProps} from '@libs/Navigation/PlatformStackNavigation/types';
 import TransitionTracker from '@libs/Navigation/TransitionTracker';
@@ -134,6 +135,12 @@ function DynamicContactMethodDetailsPage({route}: DynamicContactMethodDetailsPag
     const isFocused = useIsFocused();
     const [shouldNavigateOnFocus, setShouldNavigateOnFocus] = useState(false);
 
+    // listPath comes from a render subscription to root navigation state and can lag one frame behind focus.
+    // Read the committed route when leaving after validation so overlays (e.g. Test tools) cannot stale the target.
+    const goBackToContactMethodsList = useCallback(() => {
+        Navigation.goBack(stripDynamicRouteSuffixFromPath(Navigation.getActiveRoute(), DYNAMIC_ROUTES.CONTACT_METHOD_DETAILS.path));
+    }, []);
+
     useEffect(() => {
         if (prevValidatedDate || !loginData?.validatedDate) {
             return;
@@ -142,13 +149,13 @@ function DynamicContactMethodDetailsPage({route}: DynamicContactMethodDetailsPag
         if (isFocused) {
             // Navigate to methods page on successful validateCode verification.
             // The validatedDate property indicates successful validateCode verification.
-            Navigation.goBack(listPath);
+            goBackToContactMethodsList();
         } else {
             // Set flag to navigate when screen regains focus
             setShouldNavigateOnFocus(true);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- Omitting `isFocused` since we don't want this effect to on focus transitions
-    }, [prevValidatedDate, loginData?.validatedDate, isDefaultContactMethod, listPath]);
+    }, [prevValidatedDate, loginData?.validatedDate, isDefaultContactMethod, goBackToContactMethodsList]);
 
     // Handle navigation when screen regains focus and flag is set
     useEffect(() => {
@@ -156,9 +163,9 @@ function DynamicContactMethodDetailsPage({route}: DynamicContactMethodDetailsPag
             return;
         }
         setShouldNavigateOnFocus(false);
-        Navigation.goBack(listPath);
+        goBackToContactMethodsList();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fire on focus transitions
-    }, [isFocused]);
+    }, [isFocused, shouldNavigateOnFocus, goBackToContactMethodsList]);
 
     useEffect(() => {
         setIsValidateCodeFormVisible(!loginData?.validatedDate);
