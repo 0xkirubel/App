@@ -19,7 +19,7 @@ import Navigation from '@libs/Navigation/Navigation';
 import type {PlatformStackRouteProp} from '@libs/Navigation/PlatformStackNavigation/types';
 import REPORT_LINK_ROUTE_PARAMS from '@libs/Navigation/reportLinkRouteParams';
 import type {ReportsSplitNavigatorParamList} from '@libs/Navigation/types';
-import {getFeedbackPromptActionIDs, getOneTransactionThreadReportID, hasNextActionMadeBySameActor} from '@libs/ReportActionsUtils';
+import {getFeedbackPromptActionIDs, getOneTransactionThreadReportID, getServerPersistedReportActionIDs, hasNextActionMadeBySameActor} from '@libs/ReportActionsUtils';
 import {
     canUserPerformWriteAction,
     chatIncludesChronosWithID,
@@ -169,7 +169,7 @@ function MoneyRequestReportActionsListContent({reportIDFromRoute, onLayout}: Mon
     const latestConciergeFeedbackActionIDs =
         conciergeFeedbackForReportActionID || isDraftPendingCompletion || hasNewerActions
             ? getEmptyArray<string>()
-            : getFeedbackPromptActionIDs(visibleReportActionsNewestFirst, reportActionIDs, customAgentAccountIDs);
+            : getFeedbackPromptActionIDs(visibleReportActionsNewestFirst, getServerPersistedReportActionIDs(reportActions), customAgentAccountIDs);
 
     const {onStartReached, onEndReached} = useMoneyRequestReportPagination({
         reportID,

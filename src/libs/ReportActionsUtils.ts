@@ -1799,6 +1799,19 @@ function isOlderReportAction(a: ReportAction, b: ReportAction): boolean {
     return isNewerReportAction(b, a);
 }
 
+/** Report action IDs the server returned for this report, excluding client-only and in-flight comments */
+function getServerPersistedReportActionIDs(reportActions: ReportAction[]): string[] {
+    return reportActions
+        .filter(
+            (action) =>
+                !action.isOptimisticAction &&
+                !action.pendingAction &&
+                action.reportActionID !== CONST.CONCIERGE_GREETING_ACTION_ID &&
+                isEmptyObject(action.errors),
+        )
+        .map((action) => action.reportActionID);
+}
+
 /**
  * Returns the ID of the author's newest comment that can show the feedback prompt.
  * The comment has to be in Onyx because the Concierge greeting and the streaming draft are built on the client and cannot hold a reaction.
@@ -5671,6 +5684,7 @@ export {
     getDismissedViolationMessageText,
     getFirstVisibleReportActionID,
     getLatestConciergeFeedbackActionID,
+    getServerPersistedReportActionIDs,
     getFeedbackPromptActionIDs,
     getLatestConciergeFeedbackActionIDFromReportActions,
     getIOUActionForReportID,

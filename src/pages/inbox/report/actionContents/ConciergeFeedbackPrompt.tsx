@@ -9,6 +9,7 @@ import Tooltip from '@components/Tooltip/PopoverAnchorTooltip';
 import useCurrentUserPersonalDetails from '@hooks/useCurrentUserPersonalDetails';
 import useDebouncedValue from '@hooks/useDebouncedValue';
 import useLocalize from '@hooks/useLocalize';
+import useNetwork from '@hooks/useNetwork';
 import useOnyx from '@hooks/useOnyx';
 import useStyleUtils from '@hooks/useStyleUtils';
 import useTheme from '@hooks/useTheme';
@@ -22,6 +23,7 @@ import {callFunctionIfActionIsAllowed} from '@userActions/Session';
 import CONST from '@src/CONST';
 import ONYXKEYS from '@src/ONYXKEYS';
 import type {ReportAction, ReportActionReactions} from '@src/types/onyx';
+import {isEmptyObject} from '@src/types/utils/EmptyObject';
 
 import type {OnyxEntry} from 'react-native-onyx';
 
@@ -70,9 +72,15 @@ function getUserReactions(emoji: Emoji, reactions: OnyxEntry<ReportActionReactio
     return [reactions?.[emoji.name], emoji.hexcode ? reactions?.[emoji.hexcode] : undefined].map((entry) => entry?.users?.[accountID]).filter((userReaction) => !!userReaction);
 }
 
-/** A rated comment does not show the prompt again */
+/** A rated comment does not show the prompt again once the reaction is confirmed on the server */
 function hasReactedWithEmoji(emoji: Emoji, reactions: OnyxEntry<ReportActionReactions>, accountID: number): boolean {
-    return getUserReactions(emoji, reactions, accountID).length > 0;
+    return [reactions?.[emoji.name], emoji.hexcode ? reactions?.[emoji.hexcode] : undefined].some((entry) => {
+        if (!entry?.users?.[accountID]) {
+            return false;
+        }
+
+        return !entry.pendingAction && isEmptyObject(entry.errors);
+    });
 }
 
 /**
@@ -158,6 +166,7 @@ function ConciergeFeedbackPrompt({
 }: ConciergeFeedbackPromptProps) {
     const styles = useThemeStyles();
     const {translate} = useLocalize();
+    const {isOffline} = useNetwork();
     const {accountID: currentUserAccountID} = useCurrentUserPersonalDetails();
 
     const [reactions] = useOnyx(`${ONYXKEYS.COLLECTION.REPORT_ACTIONS_REACTIONS}${action.reportActionID}`);
@@ -189,7 +198,7 @@ function ConciergeFeedbackPrompt({
 
     const rate = (emoji: Emoji) => {
         // Skin tone is ignored on compare so a user whose preferred tone changed toggles their existing reaction instead of adding a second one
-        toggleEmojiReaction(reportID, action, emoji, reactions, preferredSkinTone, currentUserAccountID, reportActions, true, true, emoji.name === thumbsUp.name ? thumbsDown : thumbsUp);
+        toggleEmojiReaction(reportID, action, emoji, reactions, preferredSkinTone, currentUserAccountID, reportActions, isOffline, true, emoji.name === thumbsUp.name ? thumbsDown : thumbsUp);
     };
 
     const hasReactedWithThumbsUp = hasReactedWithEmoji(thumbsUp, reactions, currentUserAccountID);

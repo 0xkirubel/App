@@ -29,6 +29,7 @@ import TransitionTracker from '@libs/Navigation/TransitionTracker';
 import {
     getFirstVisibleReportActionID,
     getFeedbackPromptActionIDs,
+    getServerPersistedReportActionIDs,
     getReportActionMessage,
     isConsecutiveActionMadeByPreviousActor,
     isDeletedParentAction,
@@ -408,7 +409,7 @@ function ReportActionsListContent({reportID, conciergeChat, onLayout}: ReportAct
     const latestConciergeFeedbackActionIDs =
         reportNameValuePairs?.conciergeFeedbackForReportActionID || isDraftPendingCompletion || hasNewerActions
             ? getEmptyArray<string>()
-            : getFeedbackPromptActionIDs(renderedVisibleReportActions, allReportActionIDs, customAgentAccountIDs);
+            : getFeedbackPromptActionIDs(renderedVisibleReportActions, getServerPersistedReportActionIDs(sortedAllReportActions ?? []), customAgentAccountIDs);
 
     useFollowActionBadgeTarget({
         reportID,

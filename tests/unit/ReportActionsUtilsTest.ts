@@ -8410,6 +8410,23 @@ describe('ReportActionsUtils', () => {
         });
     });
 
+    describe('getServerPersistedReportActionIDs', () => {
+        it('drops optimistic, pending, greeting, and errored comments', () => {
+            const confirmed = {
+                reportActionID: '100',
+                actionName: CONST.REPORT.ACTIONS.TYPE.ADD_COMMENT,
+                actorAccountID: CONST.ACCOUNT_ID.CONCIERGE,
+                created: '2026-09-01 00:00:00.000',
+            } as ReportAction;
+            const optimistic = {...confirmed, reportActionID: '200', isOptimisticAction: true} as ReportAction;
+            const pending = {...confirmed, reportActionID: '300', pendingAction: CONST.RED_BRICK_ROAD_PENDING_ACTION.ADD} as ReportAction;
+            const greeting = {...confirmed, reportActionID: String(CONST.CONCIERGE_GREETING_ACTION_ID)} as ReportAction;
+            const failed = {...confirmed, reportActionID: '400', errors: {generic: 'fail'}} as ReportAction;
+
+            expect(ReportActionsUtils.getServerPersistedReportActionIDs([confirmed, optimistic, pending, greeting, failed])).toEqual(['100']);
+        });
+    });
+
     describe('getLatestConciergeFeedbackActionID', () => {
         function conciergeComment(reportActionID: string, created: string, overrides: Partial<ReportAction> = {}): ReportAction {
             return {
